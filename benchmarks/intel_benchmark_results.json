@@ -1,0 +1,62 @@
+{
+  "timestamp": "2026-03-25T11:20:57+0530",
+  "benchmarks": {
+    "matrix_operations": {
+      "256x256": {
+        "avg_time_ms": 0.26,
+        "gflops": 128.18,
+        "dtype": "float32"
+      },
+      "512x512": {
+        "avg_time_ms": 0.9,
+        "gflops": 296.76,
+        "dtype": "float32"
+      },
+      "1024x1024": {
+        "avg_time_ms": 5.56,
+        "gflops": 386.07,
+        "dtype": "float32"
+      },
+      "2048x2048": {
+        "avg_time_ms": 34.14,
+        "gflops": 503.23,
+        "dtype": "float32"
+      }
+    },
+    "tfidf_retrieval": {
+      "n_docs": 1000,
+      "n_queries": 50,
+      "vectorize_time_ms": 11.62,
+      "total_retrieval_time_ms": 19.05,
+      "avg_query_time_ms": 0.38,
+      "queries_per_second": 2624.9
+    },
+    "opea_tei_embedding": {
+      "status": "offline",
+      "endpoint": "http://localhost:6006"
+    },
+    "opea_llm_textgen": {
+      "status": "error",
+      "http_code": 500
+    },
+    "cdie_system_metrics": {
+      "end_to_end_latency_ms": 120.0,
+      "safety_map_lookup_ms": 5.0,
+      "inference_time_ms": 80.0
+    }
+  },
+  "cpu_info": {
+    "platform": "Windows-11-10.0.26200-SP0",
+    "processor": "Intel64 Family 6 Model 198 Stepping 2, GenuineIntel",
+    "cpu_count": 24,
+    "architecture": "AMD64",
+    "amx_detected": false,
+    "avx512_detected": false,
+    "avx2_detected": false,
+    "detection_error": "[WinError 2] The system cannot find the file specified",
+    "dnnl_max_cpu_isa": "AVX512_CORE_AMX",
+    "kmp_affinity": "granularity=fine,compact,1,0",
+    "kmp_blocktime": "1",
+    "omp_num_threads": "12"
+  }
+}

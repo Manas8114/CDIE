@@ -1,0 +1,40 @@
+ITU-T Recommendation Q.3960 — SIM Box Fraud Detection Guidelines
+================================================================
+
+Section 3.2: Causal Mechanisms in Telecom Revenue Assurance
+
+The following causal relationships have been identified through operator
+experience and regulatory analysis:
+
+1. An increase in CallDataRecordVolume directly causes higher NetworkLoad
+   on core switching infrastructure. This relationship is well-established
+   across multiple operator datasets (confidence > 0.90).
+
+2. SIMBoxFraudAttempts have a direct causal effect on RevenueLeakageVolume.
+   Each percentage increase in SIM box fraud attempts leads to a proportional
+   increase in revenue leakage, typically with a 2-4 hour lag.
+
+3. FraudPolicyStrictness directly improves SIMFraudDetectionRate. Operators
+   who implement stricter fraud policies see measurably higher detection rates
+   within the first billing cycle.
+
+4. RevenueLeakageVolume has a strong causal impact on CashFlowRisk. Revenue
+   leakage erodes cash reserves and increases financial exposure.
+
+5. SIMFraudDetectionRate causally reduces ARPUImpact. Higher detection rates
+   mitigate the negative impact on Average Revenue Per User.
+
+6. RegulatorySignal from national regulators intensifies ITURegulatoryPressure
+   on operators to adopt fraud mitigation measures.
+
+7. NetworkLoad contributes to increased NetworkOpExCost through additional
+   infrastructure provisioning requirements.
+
+Section 4.1: Secondary Effects
+
+8. SubscriberRetentionScore is influenced by ARPUImpact. Subscribers exposed
+   to degraded service quality (reflected in lower ARPU metrics) show higher
+   churn propensity.
+
+Note: These relationships were validated through field studies conducted by
+ITU member administrations across 15 developing markets (2022-2025).

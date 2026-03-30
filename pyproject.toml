@@ -1,0 +1,7 @@
+[tool.ruff]
+exclude = [
+    ".agent",
+    ".git",
+    "__pycache__",
+    "venv",
+]

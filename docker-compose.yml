@@ -1,0 +1,251 @@
+# CDIE v5 — Causal Decision Intelligence Engine
+# Docker Compose with OPEA GenAIComps Integration
+# Optimized for Intel hardware (AMX/AVX-512)
+
+services:
+
+  # ═══════════════════════════════════════════════════════════════
+  # OPEA GenAIComps: TGI Backend (HuggingFace Text Generation Inference)
+  # Serves Intel/neural-chat-7b-v3-3 via the TGI runtime
+  # ═══════════════════════════════════════════════════════════════
+  tgi-service:
+    image: ghcr.io/huggingface/text-generation-inference:2.4.0-intel-cpu
+    container_name: rename-tgi
+    ports:
+      - "8008:80"
+    environment:
+      - HF_TOKEN=${HF_TOKEN}
+      - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN}
+      # Intel AMX/AVX-512 Hardware Optimization
+      - DNNL_MAX_CPU_ISA=AVX512_CORE_AMX
+      - KMP_AFFINITY=granularity=fine,compact,1,0
+      - KMP_BLOCKTIME=1
+      - OMP_NUM_THREADS=12
+    volumes:
+      - tgi-data:/data
+    command: --model-id Intel/neural-chat-7b-v3-3 --max-input-length 2048 --max-total-tokens 4096
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 32G
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:80/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - cdie-network
+    restart: unless-stopped
+
+  # ═══════════════════════════════════════════════════════════════
+  # OPEA GenAIComps: TextGen Microservice
+  # OpenAI-compatible /v1/chat/completions endpoint
+  # Wraps TGI with OPEA's standardized GenAI microservice interface
+  # ═══════════════════════════════════════════════════════════════
+  opea-llm-textgen:
+    image: opea/llm-textgen:latest
+    container_name: rename-opea-textgen
+    ports:
+      - "9000:9000"
+    environment:
+      - LLM_ENDPOINT=http://tgi-service:80
+      - LLM_MODEL_ID=Intel/neural-chat-7b-v3-3
+      - LLM_COMPONENT_NAME=OpeaTextGenService
+      - HF_TOKEN=${HF_TOKEN}
+      # Intel AMX/AVX-512 Hardware Optimization
+      - DNNL_MAX_CPU_ISA=AVX512_CORE_AMX
+      - KMP_AFFINITY=granularity=fine,compact,1,0
+    depends_on:
+      - tgi-service
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+    networks:
+      - cdie-network
+    restart: unless-stopped
+
+  # ═══════════════════════════════════════════════════════════════
+  # OPEA GenAIComps: TEI Embedding Service
+  # Converts text to dense vector embeddings for semantic retrieval
+  # Model: BAAI/bge-base-en-v1.5 (Intel-optimized, 768-dim)
+  # ═══════════════════════════════════════════════════════════════
+  tei-embedding:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-latest
+    container_name: rename-tei-embedding
+    ports:
+      - "6006:80"
+    environment:
+      - HF_TOKEN=${HF_TOKEN}
+      # Intel AMX/AVX-512 Hardware Optimization
+      - DNNL_MAX_CPU_ISA=AVX512_CORE_AMX
+      - KMP_AFFINITY=granularity=fine,compact,1,0
+      - KMP_BLOCKTIME=1
+      - OMP_NUM_THREADS=12
+    volumes:
+      - tei-embedding-data:/data
+    command: --model-id BAAI/bge-base-en-v1.5 --max-client-batch-size 32
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+    networks:
+      - cdie-network
+    restart: unless-stopped
+
+  # ═══════════════════════════════════════════════════════════════
+  # OPEA GenAIComps: TEI Reranking Service
+  # Re-ranks retrieved passages for higher relevance precision
+  # Model: BAAI/bge-reranker-base
+  # ═══════════════════════════════════════════════════════════════
+  tei-reranking:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-latest
+    container_name: rename-tei-reranking
+    ports:
+      - "8808:80"
+    environment:
+      - HF_TOKEN=${HF_TOKEN}
+      # Intel AMX/AVX-512 Hardware Optimization
+      - DNNL_MAX_CPU_ISA=AVX512_CORE_AMX
+      - KMP_AFFINITY=granularity=fine,compact,1,0
+    volumes:
+      - tei-reranking-data:/data
+    command: --model-id BAAI/bge-reranker-base
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+    networks:
+      - cdie-network
+    restart: unless-stopped
+
+  # ═══════════════════════════════════════════════════════════════
+  # CDIE Offline Pipeline (Causal Discovery + Effect Estimation)
+  # Generates safety_map.db with all pre-computed scenarios
+  # ═══════════════════════════════════════════════════════════════
+  pipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile.pipeline
+    container_name: rename-pipeline
+    volumes:
+      - ./data:/app/data
+    environment:
+      # Intel AMX/AVX-512 Hardware Optimization
+      - DNNL_MAX_CPU_ISA=AVX512_CORE_AMX
+      - KMP_AFFINITY=granularity=fine,compact,1,0
+      - KMP_BLOCKTIME=1
+      - OMP_NUM_THREADS=12
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+    networks:
+      - cdie-network
+    restart: "no"
+
+  # ═══════════════════════════════════════════════════════════════
+  # CDIE FastAPI Backend (Online Causal Lookup + OPEA LLM)
+  # Serves drift, backtest, federation, and knowledge APIs
+  # ═══════════════════════════════════════════════════════════════
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: rename-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./cdie:/app/cdie
+    environment:
+      - OPEA_LLM_ENDPOINT=http://opea-llm-textgen:9000
+      - OPEA_EMBEDDING_ENDPOINT=http://tei-embedding:80
+      - OPEA_RERANKING_ENDPOINT=http://tei-reranking:80
+      - LLM_MODEL_ID=Intel/neural-chat-7b-v3-3
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      # Intel AMX/AVX-512 Hardware Optimization
+      - DNNL_MAX_CPU_ISA=AVX512_CORE_AMX
+      - KMP_AFFINITY=fine,compact,1,0
+      - KMP_BLOCKTIME=1
+      - OMP_NUM_THREADS=12
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - cdie-network
+    restart: unless-stopped
+
+  # ═══════════════════════════════════════════════════════════════
+  # CDIE Streamlit UI (Legacy — use Next.js frontend for production)
+  # ═══════════════════════════════════════════════════════════════
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+    container_name: rename-ui
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - API_URL=http://api:8000
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1G
+    networks:
+      - cdie-network
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ═══════════════════════════════════════════════════════════════
+  # CDIE Next.js Dashboard (Production Build)
+  # Modern UI with Drift Dashboard, Backtesting, Federation
+  # ═══════════════════════════════════════════════════════════════
+  nextjs-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.nextjs
+    container_name: rename-nextjs-ui
+    ports:
+      - "3000:3000"
+    environment:
+      - API_URL=http://api:8000
+      - NODE_ENV=production
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
+    networks:
+      - cdie-network
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  tgi-data:
+  tei-embedding-data:
+  tei-reranking-data:
+
+networks:
+  cdie-network:
+    driver: bridge
