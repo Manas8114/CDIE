@@ -7,6 +7,8 @@ and stores them as an indexed JSON for O(log n) online lookup.
 import json
 import hashlib
 import time
+import sqlite3
+from typing import Optional
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -110,6 +112,7 @@ def build_safety_map(
     print("[SafetyMap] Building Safety Map...")
 
     from typing import Any, Dict
+
     safety_map: Dict[str, Any] = {
         "version": "4.0.0",
         "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -125,8 +128,7 @@ def build_safety_map(
         },
         "graph": {
             "nodes": [
-                {"id": v, "label": v, "type": "variable"}
-                for v in VARIABLE_NAMES
+                {"id": v, "label": v, "type": "variable"} for v in VARIABLE_NAMES
             ],
             "edges": [],
         },
@@ -144,14 +146,20 @@ def build_safety_map(
     for edge_key, edge_info in refutation_results.get("edge_results", {}).items():
         src = edge_info["source"]
         tgt = edge_info["target"]
-        safety_map["graph"]["edges"].append({
-            "from": src,
-            "to": tgt,
-            "edge_type": "directed",
-            "weight": estimation_results.get(edge_key, {}).get("ate", {}).get("ate", 0),
-            "refutation_status": "QUARANTINED" if edge_info["quarantined"] else "VALIDATED",
-            "tests": edge_info["tests"],
-        })
+        safety_map["graph"]["edges"].append(
+            {
+                "from": src,
+                "to": tgt,
+                "edge_type": "directed",
+                "weight": estimation_results.get(edge_key, {})
+                .get("ate", {})
+                .get("ate", 0),
+                "refutation_status": "QUARANTINED"
+                if edge_info["quarantined"]
+                else "VALIDATED",
+                "tests": edge_info["tests"],
+            }
+        )
 
     # Add quarantined edges
     for src, tgt in refutation_results.get("quarantined_edges", []):
@@ -199,13 +207,17 @@ def build_safety_map(
                 "q75": float(np.round(float(data[col].quantile(0.75)), 4)),
                 "min": float(np.round(float(data[col].min()), 4)),
                 "max": float(np.round(float(data[col].max()), 4)),
-                "sample_values": data[col].sample(min(100, len(data)), random_state=42).tolist(),
+                "sample_values": data[col]
+                .sample(min(100, len(data)), random_state=42)
+                .tolist(),
             }
 
     # XGBoost comparison data
     safety_map["xgboost_comparison"] = _generate_xgboost_comparison(data)
 
-    print(f"[SafetyMap] Built {n_scenarios} scenarios for {len(estimation_results)} edges")
+    print(
+        f"[SafetyMap] Built {n_scenarios} scenarios for {len(estimation_results)} edges"
+    )
     return safety_map
 
 
@@ -222,7 +234,9 @@ def _generate_xgboost_comparison(data: pd.DataFrame):
         X = data[features].values
         y = data[target].values
 
-        model = xgb.XGBRegressor(n_estimators=100, max_depth=4, random_state=42, verbosity=0)
+        model = xgb.XGBRegressor(
+            n_estimators=100, max_depth=4, random_state=42, verbosity=0
+        )
         model.fit(X, y)
 
         explainer = shap.TreeExplainer(model)
@@ -261,9 +275,6 @@ def _generate_xgboost_comparison(data: pd.DataFrame):
         }
 
 
-import sqlite3
-from typing import Optional
-
 def save_safety_map(safety_map: dict, output_dir: Optional[Path] = None):
     """Save Safety Map with SHA-256 integrity hash into an SQLite database."""
     out = output_dir or DATA_DIR
@@ -279,9 +290,9 @@ def save_safety_map(safety_map: dict, output_dir: Optional[Path] = None):
 
     with sqlite3.connect(db_path) as conn:
         cursor = conn.cursor()
-        
+
         # Scenarios table indexed by source and target
-        cursor.execute('''CREATE TABLE IF NOT EXISTS scenarios (
+        cursor.execute("""CREATE TABLE IF NOT EXISTS scenarios (
             id TEXT PRIMARY KEY,
             source TEXT,
             target TEXT,
@@ -292,64 +303,74 @@ def save_safety_map(safety_map: dict, output_dir: Optional[Path] = None):
             effect_upper REAL,
             refutation_status TEXT,
             data_payload TEXT
-        )''')
-        
+        )""")
+
         # Key-Value store table for metadata/graphs
-        cursor.execute('''CREATE TABLE IF NOT EXISTS store (
+        cursor.execute("""CREATE TABLE IF NOT EXISTS store (
             key TEXT PRIMARY KEY,
             value TEXT
-        )''')
-        
+        )""")
+
         # Clear existing
-        cursor.execute('DELETE FROM scenarios')
-        cursor.execute('DELETE FROM store')
-        
+        cursor.execute("DELETE FROM scenarios")
+        cursor.execute("DELETE FROM store")
+
         # Insert scenarios using bulk execute
         scenarios = safety_map.get("scenarios", {})
         scenario_rows = []
         for sid, sc in scenarios.items():
             effect = sc.get("effect", {})
-            scenario_rows.append((
-                sid,
-                sc["source"],
-                sc["target"],
-                sc["magnitude_key"],
-                sc["magnitude_value"],
-                effect.get("point_estimate", 0),
-                effect.get("ci_lower", 0),
-                effect.get("ci_upper", 0),
-                sc.get("refutation_status", "UNKNOWN"),
-                json.dumps(sc)
-            ))
-            
-        cursor.executemany('''
+            scenario_rows.append(
+                (
+                    sid,
+                    sc["source"],
+                    sc["target"],
+                    sc["magnitude_key"],
+                    sc["magnitude_value"],
+                    effect.get("point_estimate", 0),
+                    effect.get("ci_lower", 0),
+                    effect.get("ci_upper", 0),
+                    sc.get("refutation_status", "UNKNOWN"),
+                    json.dumps(sc),
+                )
+            )
+
+        cursor.executemany(
+            """
             INSERT INTO scenarios (
                 id, source, target, magnitude_key, magnitude_value, 
                 effect_point, effect_lower, effect_upper, 
                 refutation_status, data_payload
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', scenario_rows)
-            
+        """,
+            scenario_rows,
+        )
+
         # Create an index for faster lookups
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_source_target ON scenarios(source, target)')
-            
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_source_target ON scenarios(source, target)"
+        )
+
         # Insert other keys into store
         store_rows = []
         for key, value in safety_map.items():
             if key == "scenarios":
                 continue
             store_rows.append((key, json.dumps(value)))
-            
-        cursor.executemany('INSERT INTO store (key, value) VALUES (?, ?)', store_rows)
-            
+
+        cursor.executemany("INSERT INTO store (key, value) VALUES (?, ?)", store_rows)
+
         conn.commit()
 
     file_size = db_path.stat().st_size
-    print(f"[SafetyMap] Saved SQLite DB to {db_path} ({file_size / 1024:.1f} KB, hash={sha256_hash[:16]}...)")
+    print(
+        f"[SafetyMap] Saved SQLite DB to {db_path} ({file_size / 1024:.1f} KB, hash={sha256_hash[:16]}...)"
+    )
 
     # === Drift Dashboard: Auto-snapshot DAG for versioned history ===
     try:
         from cdie.api.drift import DriftAnalyzer
+
         graph = safety_map.get("graph", {})
         edges = [(e["from"], e["to"]) for e in graph.get("edges", [])]
         ate_map = {}
@@ -366,6 +387,6 @@ def save_safety_map(safety_map: dict, output_dir: Optional[Path] = None):
 
     return db_path, sha256_hash
 
+
 if __name__ == "__main__":
     print("Safety Map generator — run via run_pipeline.py")
-

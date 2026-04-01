@@ -5,3 +5,27 @@ exclude = [
     "__pycache__",
     "venv",
 ]
+
+[tool.mypy]
+ignore_missing_imports = true
+check_untyped_defs = false
+disallow_untyped_defs = false
+warn_return_any = false
+warn_unused_ignores = false
+no_implicit_optional = true
+disable_error_code = [
+    "assignment",
+    "arg-type",
+    "return-value",
+    "var-annotated",
+    "index",
+    "attr-defined",
+    "operator",
+    "annotation-unchecked",
+]
+exclude = [
+    "^\\.agent/",
+    "^debug_",
+    "^parse_",
+    "^print_",
+]

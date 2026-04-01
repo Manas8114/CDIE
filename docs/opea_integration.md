@@ -36,7 +36,7 @@ The system performs a high-speed lookup in the **Safety Map** (SQLite/JSON) to f
 The OPEA **TEI Embedding** microservice converts the user's query into a dense vector (768-dim) and performs a cosine-similarity search over a knowledge base of **Telecom Fraud Playbooks**.
 
 ### 4. TEI Cross-Encoder Reranking
-To ensure the most relevant context is provided to the LLM, the **TEI Reranker** cross-scores the top-6 candidate playbooks, prioritizing actions that specifically mitigate the identified causal risk.
+To ensure the most relevant context is provided to the LLM, the **TEI Reranker** cross-scores the top-6 candidate playbooks, prioritizing actions that specifically mitigate the identified causal risk. The necessity of this reranking stage is grounded in the embedding precision ceiling (Weller et al., 2025): single-vector bi-encoders lose token-level interaction signals — negations, causal qualifiers, domain-specific phrasing — that cross-encoders recover through joint query–document attention.
 
 ### 5. GenAI Report Generation
 Finally, the OPEA **LLM TextGen** microservice (running **Intel/neural-chat-7b-v3-3** via TGI) synthesizes the causal evidence and the retrieved playbooks into a professional Markdown report for the operator.

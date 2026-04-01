@@ -3,9 +3,9 @@ CDIE v5 — Federated Causal Learning (Foundation)
 Enables sharing causal structure (PAG edges + confidence) between operators
 without exposing raw CDR data. Supports: export, import, weighted aggregation.
 """
-import json
+
 import time
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from cdie.pipeline.data_generator import VARIABLE_NAMES
 
 
@@ -34,7 +34,9 @@ class PAGSerializer:
                     "source": src,
                     "target": tgt,
                     "ate": ate_map.get(f"{src}->{tgt}", None),
-                    "confidence": min(1.0, abs(ate_map.get(f"{src}->{tgt}", 0)) * 2 + 0.5),
+                    "confidence": min(
+                        1.0, abs(ate_map.get(f"{src}->{tgt}", 0)) * 2 + 0.5
+                    ),
                 }
                 for src, tgt in edges
             ],

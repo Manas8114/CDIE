@@ -4,6 +4,7 @@ SQLite-backed versioned store for extracted causal priors.
 Replaces flat JSON files with an auditable, versioned knowledge base.
 Supports: prior ingestion, conflict detection, HITL adjudication, cold-start seeding.
 """
+
 import json
 import sqlite3
 import time
@@ -80,8 +81,14 @@ class KnowledgeStore:
         try:
             with open(seed_path) as f:
                 seed_priors = json.load(f)
-            self.add_priors(seed_priors, origin="public_seed", source_document="GSMA/ITU Public Fraud Intelligence")
-            logger.info(f"[KnowledgeStore] Cold-start: loaded {len(seed_priors)} public seed priors.")
+            self.add_priors(
+                seed_priors,
+                origin="public_seed",
+                source_document="GSMA/ITU Public Fraud Intelligence",
+            )
+            logger.info(
+                f"[KnowledgeStore] Cold-start: loaded {len(seed_priors)} public seed priors."
+            )
         except Exception as e:
             logger.error(f"[KnowledgeStore] Failed to load seed: {e}")
 
@@ -168,7 +175,16 @@ class KnowledgeStore:
                         (prior_source, prior_target, prior_confidence, dag_source, dag_target, 
                          conflict_type, description, created_at)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (src, tgt, conf, tgt, src, "REVERSED", conflict["description"], now),
+                        (
+                            src,
+                            tgt,
+                            conf,
+                            tgt,
+                            src,
+                            "REVERSED",
+                            conflict["description"],
+                            now,
+                        ),
                     )
                     conflicts.append(conflict)
 
@@ -210,7 +226,10 @@ class KnowledgeStore:
                 "SELECT * FROM conflicts WHERE id=?", (conflict_id,)
             ).fetchone()
             if not conflict:
-                return {"success": False, "message": f"Conflict {conflict_id} not found."}
+                return {
+                    "success": False,
+                    "message": f"Conflict {conflict_id} not found.",
+                }
 
             conn.execute(
                 "UPDATE conflicts SET resolved=1, resolution=?, resolved_by='expert', resolved_at=? WHERE id=?",
@@ -243,8 +262,12 @@ class KnowledgeStore:
             ).fetchall()
         return [
             {
-                "source": r[0], "target": r[1], "confidence": r[2],
-                "origin": r[3], "source_document": r[4], "created_at": r[5],
+                "source": r[0],
+                "target": r[1],
+                "confidence": r[2],
+                "origin": r[3],
+                "source_document": r[4],
+                "created_at": r[5],
             }
             for r in rows
         ]
@@ -257,9 +280,15 @@ class KnowledgeStore:
             ).fetchall()
         return [
             {
-                "id": r[0], "prior_source": r[1], "prior_target": r[2],
-                "prior_confidence": r[3], "dag_source": r[4], "dag_target": r[5],
-                "conflict_type": r[6], "description": r[7], "created_at": r[8],
+                "id": r[0],
+                "prior_source": r[1],
+                "prior_target": r[2],
+                "prior_confidence": r[3],
+                "dag_source": r[4],
+                "dag_target": r[5],
+                "conflict_type": r[6],
+                "description": r[7],
+                "created_at": r[8],
             }
             for r in rows
         ]

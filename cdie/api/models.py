@@ -4,11 +4,13 @@ API contracts per SRS §3.4.
 """
 
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, Any
 
 
 class QueryRequest(BaseModel):
-    query: str = Field(..., min_length=1, description="User query about enterprise data")
+    query: str = Field(
+        ..., min_length=1, description="User query about enterprise data"
+    )
 
 
 class EffectResult(BaseModel):
@@ -120,4 +122,16 @@ class ExpertCorrectionRequest(BaseModel):
 
 class ExpertCorrectionResponse(BaseModel):
     success: bool
+    message: str
+
+
+class PrescribeRequest(BaseModel):
+    target: str
+    maximize: bool = True
+    limit: int = 3
+
+
+class PrescribeResponse(BaseModel):
+    target: str
+    prescriptions: list[dict[str, Any]]
     message: str

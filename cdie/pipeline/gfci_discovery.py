@@ -73,7 +73,9 @@ def extract_discovered_edges(graph_result, variable_names):
                         discovered_edges.append((variable_names[i], variable_names[j]))
                     elif adj_matrix[i, j] == 1 and adj_matrix[j, i] == 1:
                         if i < j:
-                            discovered_edges.append((variable_names[i], variable_names[j]))
+                            discovered_edges.append(
+                                (variable_names[i], variable_names[j])
+                            )
 
     return discovered_edges
 
@@ -132,7 +134,9 @@ def run_discovery(data, variable_names=None, timeout_seconds=60, dynamic_priors=
     numeric_cols = [c for c in variable_names if c in data.columns]
     data_matrix = data[numeric_cols].values.astype(np.float64)
 
-    print(f"[GFCI] Running causal discovery on {len(numeric_cols)} variables, {len(data_matrix)} samples...")
+    print(
+        f"[GFCI] Running causal discovery on {len(numeric_cols)} variables, {len(data_matrix)} samples..."
+    )
 
     result = {"success": False}
     algorithm_used = "GFCI"
@@ -147,9 +151,13 @@ def run_discovery(data, variable_names=None, timeout_seconds=60, dynamic_priors=
 
     if thread.is_alive() or not result.get("success", False):
         if thread.is_alive():
-            print(f"[GFCI] Timeout after {timeout_seconds}s — falling back to PC algorithm")
+            print(
+                f"[GFCI] Timeout after {timeout_seconds}s — falling back to PC algorithm"
+            )
         else:
-            print(f"[GFCI] GFCI failed: {result.get('error', 'unknown')} — falling back to PC")
+            print(
+                f"[GFCI] GFCI failed: {result.get('error', 'unknown')} — falling back to PC"
+            )
 
         pc_result, algorithm_used = _run_pc_fallback(data_matrix, numeric_cols)
         if pc_result is not None:
@@ -164,15 +172,24 @@ def run_discovery(data, variable_names=None, timeout_seconds=60, dynamic_priors=
 
     # If discovery found too few edges, supplement with domain priors
     if len(discovered_edges) < 5:
-        print(f"[GFCI] Only {len(discovered_edges)} edges found — supplementing with domain priors")
+        print(
+            f"[GFCI] Only {len(discovered_edges)} edges found — supplementing with domain priors"
+        )
         for (src, tgt), w in DOMAIN_PRIORS.items():
-            if (src, tgt) not in discovered_edges and (tgt, src) not in discovered_edges:
+            if (src, tgt) not in discovered_edges and (
+                tgt,
+                src,
+            ) not in discovered_edges:
                 discovered_edges.append((src, tgt))
 
     # Build MAP-DAG using dynamic priors
-    map_dag = build_map_dag(discovered_edges, numeric_cols, dynamic_priors=dynamic_priors)
+    map_dag = build_map_dag(
+        discovered_edges, numeric_cols, dynamic_priors=dynamic_priors
+    )
 
-    print(f"[GFCI] Discovery complete. Algorithm: {algorithm_used}. Edges: {len(discovered_edges)}. DAG edges: {map_dag.number_of_edges()}")
+    print(
+        f"[GFCI] Discovery complete. Algorithm: {algorithm_used}. Edges: {len(discovered_edges)}. DAG edges: {map_dag.number_of_edges()}"
+    )
 
     return {
         "pag_edges": discovered_edges,
@@ -187,6 +204,7 @@ def run_discovery(data, variable_names=None, timeout_seconds=60, dynamic_priors=
 
 if __name__ == "__main__":
     from cdie.pipeline.data_generator import generate_scm_data
+
     df = generate_scm_data()
     result = run_discovery(df)
     print("\nDiscovered DAG edges:")

@@ -3,19 +3,22 @@ CDIE v5 — Universal Data Ingestion Pipeline
 Handles multi-modal data ingestion (CSV, Parquet, JSON, Excel, PDF).
 Routes by MIME type, applies schema contract, and produces normalized DataFrames.
 """
-import io
+
 import mimetypes
 import pandas as pd
-from typing import Tuple, List, BinaryIO
+from types import ModuleType
+from typing import Tuple, List, BinaryIO, Optional, Any, cast
 from cdie.pipeline.schema_contract import validate_schema
 
+pdfplumber: Optional[ModuleType] = None
 try:
-    import pdfplumber
+    import pdfplumber  # type: ignore[import-untyped,no-redef]
 except ImportError:
-    pdfplumber = None
+    pass
 
 try:
     import openpyxl  # noqa: F401
+
     HAS_OPENPYXL = True
 except ImportError:
     HAS_OPENPYXL = False
@@ -59,7 +62,7 @@ class DataIngestionRouter:
                     "Install via `pip install pdfplumber`."
                 )
             all_data = []
-            with pdfplumber.open(file_obj) as pdf:
+            with pdfplumber.open(cast(Any, file_obj)) as pdf:
                 for page in pdf.pages:
                     table = page.extract_table()
                     if table:
@@ -71,8 +74,7 @@ class DataIngestionRouter:
                     "Needs at least a header and one row."
                 )
             headers = [
-                str(h).strip() if h else f"col_{i}"
-                for i, h in enumerate(all_data[0])
+                str(h).strip() if h else f"col_{i}" for i, h in enumerate(all_data[0])
             ]
             df = pd.DataFrame(all_data[1:], columns=headers)
             warnings.append(f"Parsed {len(df)} rows from PDF tables.")
@@ -90,9 +92,10 @@ class DataIngestionRouter:
         # Build pre-ingestion report
         adversarial_flags = [w for w in warnings if "ADVERSARIAL" in w]
         if adversarial_flags:
-            warnings.insert(0,
+            warnings.insert(
+                0,
                 f"SECURITY_ALERT: {len(adversarial_flags)} adversarial injection pattern(s) detected. "
-                "Review warnings before proceeding."
+                "Review warnings before proceeding.",
             )
 
         return df, warnings

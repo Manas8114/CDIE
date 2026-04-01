@@ -5,8 +5,6 @@ Tests the SQLite-backed Safety Map lookup, staleness checking, and prescriptions
 
 import json
 import sqlite3
-import tempfile
-import os
 import pytest  # type: ignore
 from pathlib import Path
 

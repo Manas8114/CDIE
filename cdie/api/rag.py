@@ -7,7 +7,6 @@ Uses OPEA TEI Reranking for passage re-ranking (fallback: cosine sim).
 """
 
 import os
-import time
 import requests  # type: ignore
 import numpy as np  # type: ignore
 from typing import Any
@@ -18,7 +17,10 @@ import json
 from pathlib import Path
 
 # Load historical playbooks for RAG retrieval
-DATA_DIR = Path(os.environ.get("CDIE_DATA_DIR", Path(__file__).parent.parent.parent / "data"))
+DATA_DIR = Path(
+    os.environ.get("CDIE_DATA_DIR", Path(__file__).parent.parent.parent / "data")
+)
+
 
 def load_historical_events():
     playbooks_path = DATA_DIR / "telecom_playbooks.json"
@@ -28,12 +30,13 @@ def load_historical_events():
     print(f"[RAG] WARNING: {playbooks_path} not found. Returning empty list.")
     return []
 
+
 HISTORICAL_EVENTS = load_historical_events()
 
 
 class ExplanationEngine:
     """Generates explanations using templates and historical analogies.
-    
+
     OPEA Integration:
     - TEI Embedding (BAAI/bge-base-en-v1.5) for semantic vector retrieval
     - TEI Reranking (BAAI/bge-reranker-base) for passage re-ranking
@@ -56,9 +59,13 @@ class ExplanationEngine:
             try:
                 self._build_opea_index()
                 self.embedding_provider = "opea_tei"
-                print(f"[RAG] OPEA TEI Embedding connected at {self.embedding_endpoint}")
+                print(
+                    f"[RAG] OPEA TEI Embedding connected at {self.embedding_endpoint}"
+                )
             except Exception as e:
-                print(f"[RAG] OPEA TEI Embedding unavailable: {e}. Falling back to TF-IDF.")
+                print(
+                    f"[RAG] OPEA TEI Embedding unavailable: {e}. Falling back to TF-IDF."
+                )
                 self._build_tfidf_index()
         else:
             self._build_tfidf_index()
@@ -69,7 +76,9 @@ class ExplanationEngine:
             print(f"[RAG] OPEA TEI Reranking connected at {self.reranking_endpoint}")
         else:
             self.reranking_provider = "cosine"
-            print("[RAG] Using cosine similarity for ranking (OPEA TEI Reranking not configured).")
+            print(
+                "[RAG] Using cosine similarity for ranking (OPEA TEI Reranking not configured)."
+            )
 
         # OPEA GenAIComps TextGen integration (priority 1)
         self.opea_endpoint = os.environ.get("OPEA_LLM_ENDPOINT")
@@ -81,17 +90,21 @@ class ExplanationEngine:
         if self.opea_endpoint:
             try:
                 from openai import OpenAI  # type: ignore
+
                 self.client = OpenAI(
                     base_url=f"{self.opea_endpoint}/v1",
                     api_key="opea-placeholder",  # OPEA TextGen doesn't require auth
                 )
                 self.llm_provider = "opea"
-                print(f"[RAG] OPEA GenAIComps TextGen connected at {self.opea_endpoint}")
+                print(
+                    f"[RAG] OPEA GenAIComps TextGen connected at {self.opea_endpoint}"
+                )
             except ImportError:
                 print("[RAG] OpenAI package not installed. Cannot connect to OPEA.")
         elif self.openai_api_key:
             try:
                 from openai import OpenAI  # type: ignore
+
                 self.client = OpenAI(api_key=self.openai_api_key)
                 self.llm_model = "gpt-4o-mini"
                 self.llm_provider = "openai"
@@ -99,7 +112,9 @@ class ExplanationEngine:
             except ImportError:
                 print("[RAG] OpenAI package not installed. Falling back to templates.")
         else:
-            print("[RAG] No LLM endpoint configured. Using template-based explanations.")
+            print(
+                "[RAG] No LLM endpoint configured. Using template-based explanations."
+            )
 
     def _build_tfidf_index(self):
         """Build TF-IDF index for historical event retrieval (fallback)."""
@@ -126,7 +141,9 @@ class ExplanationEngine:
         response.raise_for_status()
         return np.array(response.json())
 
-    def _rerank_opea(self, query: str, passages: list[dict], top_k: int = 3) -> list[dict]:
+    def _rerank_opea(
+        self, query: str, passages: list[dict], top_k: int = 3
+    ) -> list[dict]:
         """Re-rank passages using OPEA TEI Reranking service."""
         try:
             texts = [p["text"] for p in passages]
@@ -161,7 +178,7 @@ class ExplanationEngine:
             query_embedding = self._embed_query_opea(query)
             if query_embedding is not None and query_embedding.ndim == 1:
                 query_embedding = query_embedding.reshape(1, -1)
-            
+
             cache = self.embeddings_cache
             if cache is not None and cache.ndim == 1:
                 cache = cache.reshape(1, -1)
@@ -175,7 +192,13 @@ class ExplanationEngine:
             for idx in top_indices:
                 event = self.events[idx].copy()
                 event["similarity"] = float(np.round(similarities[idx], 4))
-                event["confidence"] = "High" if similarities[idx] > 0.6 else "Medium" if similarities[idx] > 0.3 else "Low"
+                event["confidence"] = (
+                    "High"
+                    if similarities[idx] > 0.6
+                    else "Medium"
+                    if similarities[idx] > 0.3
+                    else "Low"
+                )
                 event["retrieval_method"] = "opea_tei_embedding"
                 candidates.append(event)
 
@@ -195,7 +218,7 @@ class ExplanationEngine:
         """Retrieve using TF-IDF sparse vectors (fallback)."""
         if self.vectorizer is None or self.tfidf_matrix is None:
             return []
-            
+
         query_vec = self.vectorizer.transform([query])
         similarities = cosine_similarity(query_vec, self.tfidf_matrix)[0]
         top_indices = np.argsort(similarities)[::-1][:top_k]
@@ -205,10 +228,74 @@ class ExplanationEngine:
             sim = float(similarities[idx])
             event = self.events[idx].copy()
             event["similarity"] = float(np.round(sim, 4))
-            event["confidence"] = "High" if sim > 0.4 else "Medium" if sim > 0.2 else "Low"
+            event["confidence"] = (
+                "High" if sim > 0.4 else "Medium" if sim > 0.2 else "Low"
+            )
             event["retrieval_method"] = "tfidf"
             results.append(event)
         return results
+
+    def _check_sufficiency(
+        self,
+        effect: dict,
+        refutation_status: dict | None,
+        analogies: list | None,
+    ) -> bool:
+        """Sufficiency gate: decide if deterministic evidence is strong enough
+        to skip the expensive LLM call.
+
+        Returns True if the causal evidence from the Safety Map is already
+        high-confidence and fully validated — meaning the template-based
+        explanation is sufficient and an LLM synthesis would add cost
+        without meaningful informational gain.
+
+        Gate criteria (ALL must hold):
+        1. Effect estimate exists with a non-trivial point estimate
+        2. Confidence interval is tight (CI width < 60% of |point estimate|)
+        3. All 3 refutation tests passed
+        4. At least one high-confidence RAG analogy was retrieved
+
+        Rationale: Richens & Everitt (ICLR 2024) show that robust agents must
+        learn causal structure. When the Safety Map already encodes validated
+        causal structure with tight CIs and passing refutations, the
+        deterministic template captures the full causal semantics. The LLM
+        is reserved for ambiguous or partially-validated scenarios where
+        synthesis and hedging language add genuine value.
+        """
+        if not isinstance(effect, dict) or not effect:
+            return False
+
+        point = effect.get("point_estimate", 0)
+        ci_lower = effect.get("ci_lower", 0)
+        ci_upper = effect.get("ci_upper", 0)
+
+        # Criterion 1: non-trivial effect
+        if abs(point) < 1e-6:
+            return False
+
+        # Criterion 2: tight confidence interval
+        ci_width = abs(ci_upper - ci_lower)
+        if ci_width > 0.6 * abs(point):
+            return False
+
+        # Criterion 3: all refutation tests passed
+        if refutation_status:
+            statuses = [
+                v for k, v in refutation_status.items()
+                if k in ("placebo", "confounder", "subset")
+            ]
+            if not statuses or not all(s == "PASS" for s in statuses):
+                return False
+        else:
+            return False
+
+        # Criterion 4: at least one high-confidence analogy retrieved
+        if not analogies or not any(
+            a.get("confidence") in ("High", "Medium") for a in analogies
+        ):
+            return False
+
+        return True
 
     def generate_explanation(
         self,
@@ -223,15 +310,34 @@ class ExplanationEngine:
         """Generate a structured explanation for the causal result."""
         fallback_text = ""
         if query_type == "intervention":
-            fallback_text = self._explain_intervention(source, target, effect, refutation_status, analogies)
+            fallback_text = self._explain_intervention(
+                source, target, effect, refutation_status, analogies
+            )
         elif query_type == "counterfactual":
-            fallback_text = self._explain_counterfactual(source, target, effect, analogies)
+            fallback_text = self._explain_counterfactual(
+                source, target, effect, analogies
+            )
         elif query_type == "root_cause":
             fallback_text = self._explain_root_cause(source, target, effect, analogies)
         elif query_type == "temporal":
-            fallback_text = self._explain_temporal(source, target, temporal_info, analogies)
+            fallback_text = self._explain_temporal(
+                source, target, temporal_info, analogies
+            )
         else:
-            fallback_text = self._explain_intervention(source, target, effect, refutation_status, analogies)
+            fallback_text = self._explain_intervention(
+                source, target, effect, refutation_status, analogies
+            )
+
+        # ── Sufficiency Gate ──────────────────────────────────────────
+        # Skip LLM when deterministic causal evidence is already strong.
+        # This saves token cost and reduces latency for validated queries.
+        if self._check_sufficiency(effect, refutation_status, analogies):
+            print(
+                f"[RAG] Sufficiency gate PASSED for {source}→{target}. "
+                f"Using template (all refutations pass, CI tight). "
+                f"Skipping LLM call."
+            )
+            return fallback_text
 
         if self.client:
             try:
@@ -239,16 +345,20 @@ class ExplanationEngine:
                     query_type, source, target, effect, refutation_status, analogies
                 )
             except Exception as e:
-                print(f"[RAG] LLM generation failed: {e}. Falling back to rule-based templates.")
+                print(
+                    f"[RAG] LLM generation failed: {e}. Falling back to rule-based templates."
+                )
                 return fallback_text
 
         return fallback_text
 
-    def _generate_llm_explanation(self, query_type, source, target, effect, refutation_status, analogies):
+    def _generate_llm_explanation(
+        self, query_type, source, target, effect, refutation_status, analogies
+    ):
         client = self.client
         if not client:
             return ""
-        
+
         point = effect.get("point_estimate", 0) if isinstance(effect, dict) else 0
         lower = effect.get("ci_lower", 0) if isinstance(effect, dict) else 0
         upper = effect.get("ci_upper", 0) if isinstance(effect, dict) else 0
@@ -278,18 +388,29 @@ class ExplanationEngine:
         response = client.chat.completions.create(
             model=self.llm_model,
             messages=[
-                {"role": "system", "content": "You are CDIE v4, an elite Causal Inference engine for telecom network intelligence, reporting to a Chief Network Officer."},
-                {"role": "user", "content": prompt}
+                {
+                    "role": "system",
+                    "content": "You are CDIE v4, an elite Causal Inference engine for telecom network intelligence, reporting to a Chief Network Officer.",
+                },
+                {"role": "user", "content": prompt},
             ],
             temperature=0.3,
-            max_tokens=250
+            max_tokens=250,
         )
         return response.choices[0].message.content.strip()
 
     def _explain_intervention(self, source, target, effect, refutation, analogies):
         point = effect.get("point_estimate", 0) if isinstance(effect, dict) else 0
-        lower = effect.get("ci_lower", point * 0.8) if isinstance(effect, dict) else point * 0.8
-        upper = effect.get("ci_upper", point * 1.2) if isinstance(effect, dict) else point * 1.2
+        lower = (
+            effect.get("ci_lower", point * 0.8)
+            if isinstance(effect, dict)
+            else point * 0.8
+        )
+        upper = (
+            effect.get("ci_upper", point * 1.2)
+            if isinstance(effect, dict)
+            else point * 1.2
+        )
         direction = "increase" if point > 0 else "decrease"
         magnitude = abs(point)
 
@@ -312,7 +433,9 @@ class ExplanationEngine:
                 f"random confounders, and data subsets.\n\n"
             )
         if analogies:
-            high_conf = [a for a in analogies if a.get("confidence") in ("High", "Medium")]
+            high_conf = [
+                a for a in analogies if a.get("confidence") in ("High", "Medium")
+            ]
             if high_conf:
                 explanation += "**Historical Precedent**: "
                 explanation += high_conf[0]["text"] + "\n\n"

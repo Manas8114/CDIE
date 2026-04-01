@@ -3,6 +3,7 @@ CDIE v5 — Causal Drift Analyzer
 Compares DAG snapshots across pipeline runs to detect structural drift.
 Supports: timeline queries, pairwise comparison, edge-level ATE history.
 """
+
 import json
 import sqlite3
 import time
@@ -120,18 +121,34 @@ class DriftAnalyzer:
                 pct_change = ((new_ate - old_ate) / abs(old_ate)) * 100
             else:
                 pct_change = 0
-            ate_changes.append({
-                "source": s, "target": t,
-                "ate_before": old_ate, "ate_after": new_ate,
-                "change_pct": round(pct_change, 1),
-                "status": "strengthened" if new_ate > old_ate else "weakened" if new_ate < old_ate else "stable",
-            })
+            ate_changes.append(
+                {
+                    "source": s,
+                    "target": t,
+                    "ate_before": old_ate,
+                    "ate_after": new_ate,
+                    "change_pct": round(pct_change, 1),
+                    "status": "strengthened"
+                    if new_ate > old_ate
+                    else "weakened"
+                    if new_ate < old_ate
+                    else "stable",
+                }
+            )
 
         ate_changes.sort(key=lambda x: abs(x["change_pct"]), reverse=True)
 
         return {
-            "from": {"id": id_from, "timestamp": snap_from["timestamp"], "n_edges": snap_from["n_edges"]},
-            "to": {"id": id_to, "timestamp": snap_to["timestamp"], "n_edges": snap_to["n_edges"]},
+            "from": {
+                "id": id_from,
+                "timestamp": snap_from["timestamp"],
+                "n_edges": snap_from["n_edges"],
+            },
+            "to": {
+                "id": id_to,
+                "timestamp": snap_to["timestamp"],
+                "n_edges": snap_to["n_edges"],
+            },
             "new_edges": [{"source": s, "target": t} for s, t in new_edges],
             "removed_edges": [{"source": s, "target": t} for s, t in removed_edges],
             "stable_edges": len(stable_edges),
@@ -140,7 +157,9 @@ class DriftAnalyzer:
                 "added": len(new_edges),
                 "removed": len(removed_edges),
                 "stable": len(stable_edges),
-                "strengthened": sum(1 for c in ate_changes if c["status"] == "strengthened"),
+                "strengthened": sum(
+                    1 for c in ate_changes if c["status"] == "strengthened"
+                ),
                 "weakened": sum(1 for c in ate_changes if c["status"] == "weakened"),
             },
         }
@@ -159,12 +178,16 @@ class DriftAnalyzer:
         for row in rows:
             edges = json.loads(row[2])
             ate_map = json.loads(row[3])
-            edge_present = any(e["source"] == source and e["target"] == target for e in edges)
-            history.append({
-                "snapshot_id": row[0],
-                "timestamp": row[1],
-                "present": edge_present,
-                "ate": ate_map.get(key, None),
-            })
+            edge_present = any(
+                e["source"] == source and e["target"] == target for e in edges
+            )
+            history.append(
+                {
+                    "snapshot_id": row[0],
+                    "timestamp": row[1],
+                    "present": edge_present,
+                    "ate": ate_map.get(key, None),
+                }
+            )
 
         return history

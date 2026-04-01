@@ -7,7 +7,9 @@ import pandas as pd
 from cdie.pipeline.data_generator import VARIABLE_NAMES
 
 
-def run_temporal_discovery(data: pd.DataFrame, variable_names: list[str] = None, max_lag: int = 4):
+def run_temporal_discovery(
+    data: pd.DataFrame, variable_names: list[str] = None, max_lag: int = 4
+):
     """
     Run temporal causal discovery using Granger cross-validation.
     Returns temporal edges representing time-lagged causal links.
@@ -21,12 +23,16 @@ def run_temporal_discovery(data: pd.DataFrame, variable_names: list[str] = None,
     # Auto-reduce lag if insufficient samples
     effective_lag = min(max_lag, max(1, n_samples // 20))
 
-    print(f"[Temporal] Running Granger causal discovery. Variables: {len(numeric_cols)}, Max lag: {effective_lag}")
+    print(
+        f"[Temporal] Running Granger causal discovery. Variables: {len(numeric_cols)}, Max lag: {effective_lag}"
+    )
 
     temporal_edges = []
-    
+
     if n_samples < 100:
-        print("[Temporal] Insufficient temporal data (n < 100) — skipping temporal discovery")
+        print(
+            "[Temporal] Insufficient temporal data (n < 100) — skipping temporal discovery"
+        )
         return {
             "temporal_edges": [],
             "status": "SKIPPED",
@@ -46,13 +52,16 @@ def run_temporal_discovery(data: pd.DataFrame, variable_names: list[str] = None,
                     test_data = data[[tgt, src]].dropna().values
                     if len(test_data) < 20:
                         continue
-                    
+
                     # Suppress warnings from statsmodels briefly if desired, though we catch exceptions
                     import warnings
+
                     with warnings.catch_warnings():
-                        warnings.simplefilter('ignore')
-                        result = grangercausalitytests(test_data, maxlag=effective_lag, verbose=False)
-                    
+                        warnings.simplefilter("ignore")
+                        result = grangercausalitytests(
+                            test_data, maxlag=effective_lag, verbose=False
+                        )
+
                     best_lag = None
                     best_p = 1.0
                     for lag_val in range(1, effective_lag + 1):
@@ -65,13 +74,15 @@ def run_temporal_discovery(data: pd.DataFrame, variable_names: list[str] = None,
 
                     if best_p < 0.05 and best_lag is not None:
                         # Append the temporal edge based on the best valid lag
-                        temporal_edges.append({
-                            "source": src,
-                            "target": tgt,
-                            "lag": best_lag,
-                            "p_value": round(float(best_p), 4),
-                            "strength": 0.51 # pseudo-strength for standard visualization parsing
-                        })
+                        temporal_edges.append(
+                            {
+                                "source": src,
+                                "target": tgt,
+                                "lag": best_lag,
+                                "p_value": round(float(best_p), 4),
+                                "strength": 0.51,  # pseudo-strength for standard visualization parsing
+                            }
+                        )
                         granger_edges.add((src, tgt, best_lag))
                 except Exception:
                     continue
@@ -82,13 +93,45 @@ def run_temporal_discovery(data: pd.DataFrame, variable_names: list[str] = None,
 
     # If no temporal edges from method, fallback to strict domain-priors for the demonstration
     if not temporal_edges:
-        print("[Temporal] No temporal edges discovered — falling back to domain-based temporal priors")
+        print(
+            "[Temporal] No temporal edges discovered — falling back to domain-based temporal priors"
+        )
         temporal_edges = [
-            {"source": "FraudAttempts", "target": "ChargebackVolume", "lag": 2, "p_value": 0.01, "strength": 0.45},
-            {"source": "DetectionPolicyStrictness", "target": "FraudDetectionRate", "lag": 1, "p_value": 0.02, "strength": 0.60},
-            {"source": "ExternalNewsSignal", "target": "RegulatoryPressure", "lag": 3, "p_value": 0.03, "strength": 0.35},
-            {"source": "ChargebackVolume", "target": "RevenueImpact", "lag": 1, "p_value": 0.01, "strength": 0.55},
-            {"source": "RegulatoryPressure", "target": "DetectionPolicyStrictness", "lag": 2, "p_value": 0.04, "strength": 0.30},
+            {
+                "source": "FraudAttempts",
+                "target": "ChargebackVolume",
+                "lag": 2,
+                "p_value": 0.01,
+                "strength": 0.45,
+            },
+            {
+                "source": "DetectionPolicyStrictness",
+                "target": "FraudDetectionRate",
+                "lag": 1,
+                "p_value": 0.02,
+                "strength": 0.60,
+            },
+            {
+                "source": "ExternalNewsSignal",
+                "target": "RegulatoryPressure",
+                "lag": 3,
+                "p_value": 0.03,
+                "strength": 0.35,
+            },
+            {
+                "source": "ChargebackVolume",
+                "target": "RevenueImpact",
+                "lag": 1,
+                "p_value": 0.01,
+                "strength": 0.55,
+            },
+            {
+                "source": "RegulatoryPressure",
+                "target": "DetectionPolicyStrictness",
+                "lag": 2,
+                "p_value": 0.04,
+                "strength": 0.30,
+            },
         ]
 
     return {
@@ -100,6 +143,7 @@ def run_temporal_discovery(data: pd.DataFrame, variable_names: list[str] = None,
 
 if __name__ == "__main__":
     from cdie.pipeline.data_generator import generate_scm_data
+
     df = generate_scm_data()
     result = run_temporal_discovery(df)
     print(f"\nTemporal edges: {len(result['temporal_edges'])}")

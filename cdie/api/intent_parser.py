@@ -7,7 +7,7 @@ Classifies queries into: intervention, counterfactual, root_cause, temporal.
 import re
 import os
 import json
-import requests
+import requests  # type: ignore[import-untyped]
 from cdie.pipeline.data_generator import VARIABLE_NAMES
 
 # Simplified variable names for matching
@@ -19,57 +19,45 @@ VARIABLE_ALIASES = {
     "call data": "CallDataRecordVolume",
     "arpu": "ARPUImpact",
     "loss": "ARPUImpact",
-
     # Generic & FinServ mapping
     "transaction volume": "TransactionVolume",
     "transaction amount": "TransactionVolume",
     "transection amount": "TransactionVolume",
     "amount": "TransactionVolume",
-    
     "fraud attempts": "SIMBoxFraudAttempts",
     "fraud prob": "SIMBoxFraudAttempts",
     "fraud": "SIMBoxFraudAttempts",
-
     "detection policy": "FraudPolicyStrictness",
     "policy strictness": "FraudPolicyStrictness",
     "strictness": "FraudPolicyStrictness",
-
     "detection rate": "SIMFraudDetectionRate",
     "fraud detection": "SIMFraudDetectionRate",
-
     "chargeback volume": "RevenueLeakageVolume",
     "chargebacks": "RevenueLeakageVolume",
     "chargeback": "RevenueLeakageVolume",
-
     "customer trust score": "SubscriberRetentionScore",
     "trust score": "SubscriberRetentionScore",
     "trust": "SubscriberRetentionScore",
     "account age": "SubscriberRetentionScore",
-    
     "revenue impact": "RevenueLeakageVolume",
     "revenue leakage": "RevenueLeakageVolume",
     "leakage": "RevenueLeakageVolume",
     "revenue": "RevenueLeakageVolume",
-
     "operational cost": "OperationalCost",
     "cost": "OperationalCost",
     "opex": "OperationalCost",
-
     "liquidity risk": "LiquidityRisk",
     "liquidity": "LiquidityRisk",
-
     "system load": "SystemLoad",
     "network load": "SystemLoad",
     "load": "SystemLoad",
-
     "external news signal": "ExternalNewsSignal",
     "news signal": "ExternalNewsSignal",
     "news": "ExternalNewsSignal",
-
     "regulatory pressure": "RegulatoryPressure",
     "regulation": "RegulatoryPressure",
     "regulatory": "RegulatoryPressure",
-    "itu": "RegulatoryPressure"
+    "itu": "RegulatoryPressure",
 }
 
 # Add exact variable names to aliases
@@ -116,35 +104,35 @@ TEMPORAL_PATTERNS = [
 def extract_entities_llm(query: str) -> dict:
     """Extract entities using OPEA LLM endpoint."""
     llm_url = os.environ.get("OPEA_LLM_ENDPOINT", "http://tgi-service:80")
-    
+
     prompt = f"""
     You are a causal inference entity extractor.
     Extract the source (intervention), target (outcome), and magnitude (percentage change) from the following query.
-    Available variables: {', '.join(VARIABLE_NAMES)}
+    Available variables: {", ".join(VARIABLE_NAMES)}
     
     Query: "{query}"
     
     Return ONLY a JSON object with keys: "source", "target", "magnitude".
     If magnitude is not specified, use 20.0. If a variable is not in the list, return null.
     """
-    
+
     try:
         response = requests.post(
             f"{llm_url}/generate",
             json={
                 "inputs": prompt,
-                "parameters": {"max_new_tokens": 128, "temperature": 0.01}
+                "parameters": {"max_new_tokens": 128, "temperature": 0.01},
             },
-            timeout=5
+            timeout=5,
         )
         if response.status_code == 200:
             text = response.json().get("generated_text", "")
-            match = re.search(r'\{.*\}', text, re.DOTALL)
+            match = re.search(r"\{.*\}", text, re.DOTALL)
             if match:
                 return json.loads(match.group(0))
     except Exception:
         pass
-    return None
+    return {}
 
 
 def extract_variables(query: str) -> tuple:
@@ -178,7 +166,9 @@ def extract_variables(query: str) -> tuple:
             msg = {"inputs": prompt, "parameters": {"max_new_tokens": 32}}
             res = requests.post(f"{llm_url}/generate", json=msg, timeout=3)
             if res.status_code == 200:
-                suggested = res.json().get("generated_text", "").strip().split('\n')[0].strip()
+                suggested = (
+                    res.json().get("generated_text", "").strip().split("\n")[0].strip()
+                )
                 if suggested in VARIABLE_NAMES:
                     target = suggested
         except Exception:
@@ -205,7 +195,10 @@ def extract_magnitude(query: str) -> float:
         match = re.search(pattern, query.lower())
         if match:
             pct = float(match.group(1))
-            if any(w in query.lower() for w in ["decrease", "reduce", "lower", "cut", "drop", "decline"]):
+            if any(
+                w in query.lower()
+                for w in ["decrease", "reduce", "lower", "cut", "drop", "decline"]
+            ):
                 return -pct
             return pct
 
@@ -245,13 +238,13 @@ def classify_query(query: str) -> dict:
         if re.search(pattern, q_lower):
             scores["temporal"] += 1
 
-    best_type = max(scores, key=scores.get)
+    best_type = max(scores, key=lambda k: scores[k])
     if scores[best_type] == 0:
         best_type = "intervention"
 
     # Try LLM extraction first, fall back to regex
     llm_entities = extract_entities_llm(query)
-    
+
     if llm_entities:
         source = llm_entities.get("source")
         target = llm_entities.get("target")
@@ -260,14 +253,20 @@ def classify_query(query: str) -> dict:
         source, target = extract_variables(query)
         magnitude = extract_magnitude(query)
 
-    is_ambiguous = scores[best_type] <= 1 and sum(1 for s in scores.values() if s > 0) > 1
+    is_ambiguous = (
+        scores[best_type] <= 1 and sum(1 for s in scores.values() if s > 0) > 1
+    )
 
     return {
         "type": best_type,
         "source": source,
         "target": target,
         "magnitude": magnitude,
-        "confidence": "high" if scores[best_type] >= 2 else "medium" if scores[best_type] == 1 else "low",
+        "confidence": "high"
+        if scores[best_type] >= 2
+        else "medium"
+        if scores[best_type] == 1
+        else "low",
         "ambiguous": is_ambiguous,
         "all_scores": scores,
     }
@@ -278,21 +277,21 @@ DEMO_QUERIES = {
     "What happens if fraud attempts increase by 30%?": {
         "source": "SIMBoxFraudAttempts",
         "target": "RevenueLeakageVolume",
-        "value": 0.3
+        "value": 0.3,
     },
     "What if we increase detection policy strictness by 20%?": {
         "source": "FraudPolicyStrictness",
         "target": "SIMFraudDetectionRate",
-        "value": 0.2
+        "value": 0.2,
     },
     "Why did chargeback volume increase?": {
         "source": "SIMBoxFraudAttempts",
         "target": "RevenueLeakageVolume",
-        "value": 0.1
+        "value": 0.1,
     },
     "Show me the temporal impact of fraud on trust.": {
         "source": "SIMBoxFraudAttempts",
         "target": "SubscriberRetentionScore",
-        "value": -0.05
-    }
+        "value": -0.05,
+    },
 }

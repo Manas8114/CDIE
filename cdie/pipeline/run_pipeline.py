@@ -12,8 +12,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from cdie.pipeline.data_generator import (
-    generate_scm_data, preprocess_data, save_data,
-    generate_ground_truth_dag, VARIABLE_NAMES, GROUND_TRUTH_EDGES, DATA_DIR,
+    generate_scm_data,
+    preprocess_data,
+    save_data,
+    generate_ground_truth_dag,
+    VARIABLE_NAMES,
+    GROUND_TRUTH_EDGES,
+    DATA_DIR,
 )
 from cdie.pipeline.catl import run_catl
 from cdie.pipeline.gfci_discovery import run_discovery
@@ -47,7 +52,7 @@ def run_pipeline(df=None, output_dir: Path = None, dag=None):
     else:
         df, preprocess_report = preprocess_data(df)
         if dag is None:
-            dag = generate_ground_truth_dag() # Fallback for now
+            dag = generate_ground_truth_dag()  # Fallback for now
         save_data(df, dag, out)
         print("[Pipeline] Using ingested custom dataset.")
 
@@ -61,13 +66,14 @@ def run_pipeline(df=None, output_dir: Path = None, dag=None):
     print("\n" + "─" * 50)
     print("STEP 3/8: GFCI Causal Discovery")
     print("─" * 50)
-    
+
     # Load dynamic priors if extracted via OPEA
     dynamic_priors = None
     priors_file = out / "extracted_priors.json"
     if priors_file.exists():
         try:
             import json
+
             with open(priors_file, "r") as f:
                 dynamic_priors = json.load(f)
             print(f"[Pipeline] Loaded {len(dynamic_priors)} dynamic OPEA priors.")
@@ -86,7 +92,9 @@ def run_pipeline(df=None, output_dir: Path = None, dag=None):
     print("\n" + "─" * 50)
     print("STEP 5/8: DoWhy Refutation Tests")
     print("─" * 50)
-    refutation_results = run_refutation(df, discovery_results["map_dag"], VARIABLE_NAMES)
+    refutation_results = run_refutation(
+        df, discovery_results["map_dag"], VARIABLE_NAMES
+    )
 
     # Check for all-quarantined edge case
     if len(refutation_results["validated_edges"]) == 0:
@@ -107,7 +115,9 @@ def run_pipeline(df=None, output_dir: Path = None, dag=None):
     print("STEP 7/8: SACHS + ALARM Benchmarks")
     print("─" * 50)
     discovered_edge_tuples = list(discovery_results["map_dag"].edges())
-    benchmark_results = run_benchmarks(discovered_edge_tuples, GROUND_TRUTH_EDGES, VARIABLE_NAMES)
+    benchmark_results = run_benchmarks(
+        discovered_edge_tuples, GROUND_TRUTH_EDGES, VARIABLE_NAMES
+    )
 
     # Step 8: Safety Map Assembly
     print("\n" + "─" * 50)

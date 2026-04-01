@@ -7,9 +7,10 @@ import json
 import sqlite3
 from pathlib import Path
 from collections import deque, defaultdict
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from scipy import stats  # type: ignore
+
 
 class SafetyMapLookup:
     """Loads and queries the pre-computed Safety Map DB."""
@@ -26,8 +27,8 @@ class SafetyMapLookup:
     def load(self, path: str):
         """Load Safety Map DB and verify integrity."""
         base_path = Path(path)
-        if base_path.suffix == '.json':
-            self.db_path = str(base_path.with_suffix('.db'))
+        if base_path.suffix == ".json":
+            self.db_path = str(base_path.with_suffix(".db"))
         else:
             self.db_path = str(base_path)
 
@@ -45,7 +46,7 @@ class SafetyMapLookup:
 
                 cursor.execute("SELECT COUNT(*) FROM scenarios")
                 n_scen = cursor.fetchone()[0]
-                
+
             print(f"[Lookup] Connected to SQLite Safety Map: {n_scen} scenarios")
             return True
         except Exception as e:
@@ -66,11 +67,13 @@ class SafetyMapLookup:
                 row = cursor.fetchone()
                 if row:
                     return json.loads(row[0])
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[Lookup] Error fetching store value for {key}: {e}")
         return default
 
-    def find_scenario(self, source: str, target: str, magnitude_key: str = None) -> dict | None:  # type: ignore
+    def find_scenario(
+        self, source: str, target: str, magnitude_key: Optional[str] = None
+    ) -> dict | None:
         """Find a matching scenario directly from SQL index."""
         if not self.is_loaded():
             return None
@@ -80,29 +83,36 @@ class SafetyMapLookup:
                 cursor = conn.cursor()
                 if magnitude_key:
                     scenario_id = f"{source}__{target}__{magnitude_key}"
-                    cursor.execute("SELECT data_payload FROM scenarios WHERE id=?", (scenario_id,))
+                    cursor.execute(
+                        "SELECT data_payload FROM scenarios WHERE id=?", (scenario_id,)
+                    )
                 else:
                     cursor.execute(
                         "SELECT data_payload FROM scenarios WHERE source=? AND target=? ORDER BY ABS(magnitude_value) ASC LIMIT 1",
-                        (source, target)
+                        (source, target),
                     )
                 row = cursor.fetchone()
                 if row:
                     return json.loads(row[0])
         except Exception as e:
             print(f"Error executing find_scenario query: {e}")
-            
+
         return None
 
-    def find_best_scenario(self, source: str, target: str, magnitude_pct: float) -> tuple[dict | None, bool]:
+    def find_best_scenario(
+        self, source: str, target: str, magnitude_pct: float
+    ) -> tuple[dict | None, bool]:
         """Find the closest pre-computed scenario for a given magnitude via SQL."""
         if not self.is_loaded():
             return None, False
 
         mag_key_map = {
-            10: "increase_10", 20: "increase_20",
-            30: "increase_30", 50: "increase_50",
-            -10: "decrease_10", -20: "decrease_20",
+            10: "increase_10",
+            20: "increase_20",
+            30: "increase_30",
+            50: "increase_50",
+            -10: "decrease_10",
+            -20: "decrease_20",
         }
 
         exact_key = mag_key_map.get(int(magnitude_pct))
@@ -112,12 +122,17 @@ class SafetyMapLookup:
                 cursor = conn.cursor()
                 if exact_key:
                     scenario_id = f"{source}__{target}__{exact_key}"
-                    cursor.execute("SELECT data_payload FROM scenarios WHERE id=?", (scenario_id,))
+                    cursor.execute(
+                        "SELECT data_payload FROM scenarios WHERE id=?", (scenario_id,)
+                    )
                     row = cursor.fetchone()
                     if row:
                         return json.loads(row[0]), True
 
-                cursor.execute("SELECT magnitude_value, data_payload FROM scenarios WHERE source=? AND target=?", (source, target))
+                cursor.execute(
+                    "SELECT magnitude_value, data_payload FROM scenarios WHERE source=? AND target=?",
+                    (source, target),
+                )
                 rows = cursor.fetchall()
 
                 best_scenario = None
@@ -135,30 +150,38 @@ class SafetyMapLookup:
             print(f"[Lookup] Error querying scenario directly: {e}")
             return None, False
 
-    def find_prescriptions(self, target: str, limit: int = 3, maximize: bool = True) -> list:
+    def find_prescriptions(
+        self, target: str, limit: int = 3, maximize: bool = True
+    ) -> list:
         """Find the top interventions to maximize or minimize a target."""
         if not self.is_loaded():
             return []
-        
+
         try:
             with sqlite3.connect(self.db_path) as conn:  # type: ignore
                 cursor = conn.cursor()
-                
-                cursor.execute('''
+
+                cursor.execute(
+                    """
                     SELECT data_payload FROM scenarios
                     WHERE target = ?
-                ''', (target,))
-                
+                """,
+                    (target,),
+                )
+
                 rows = cursor.fetchall()
                 prescriptions = []
-                
+
                 for row in rows:
                     scenario = json.loads(row[0])
                     if scenario.get("refutation_status") != "UNPROVEN":
                         prescriptions.append(scenario)
-                        
-                prescriptions.sort(key=lambda x: x.get("effect", {}).get("point_estimate", 0), reverse=maximize)
-                
+
+                prescriptions.sort(
+                    key=lambda x: x.get("effect", {}).get("point_estimate", 0),
+                    reverse=maximize,
+                )
+
                 return list(prescriptions[:limit])  # type: ignore
         except sqlite3.Error as e:
             print(f"[Lookup] Error finding prescriptions: {e}")
@@ -176,7 +199,12 @@ class SafetyMapLookup:
         sample_values = training_dist.get("sample_values", [])
 
         if len(self.query_history[source]) < 10 or len(sample_values) < 10:
-            return {"warning": False, "ks_statistic": 0.0, "p_value": 1.0, "reason": "insufficient_data"}
+            return {
+                "warning": False,
+                "ks_statistic": 0.0,
+                "p_value": 1.0,
+                "reason": "insufficient_data",
+            }
 
         recent_values = list(self.query_history[source])
         ks_stat, p_value = stats.ks_2samp(recent_values, sample_values)

@@ -2,7 +2,7 @@
 
 ## Causal Decision Intelligence Engine for Telecom SIM Box Fraud Detection
 
-**ITU AI4Good OPEA Innovation Challenge — Build & Submit Phase**
+### ITU AI4Good OPEA Innovation Challenge — Build & Submit Phase
 
 ---
 
@@ -13,6 +13,10 @@ SIM box fraud causes an estimated **$3.8 billion** in annual revenue losses for 
 CDIE v4 introduces **Causal AI** for telecom fraud detection: rather than identifying what *correlates* with fraud, it discovers what *causes* fraud, validates those causal claims through rigorous refutation tests, and generates actionable intelligence reports using OPEA's GenAI microservice stack.
 
 **Target Users**: Chief Network Officers, Revenue Assurance teams, and Network Operations Centers at Tier-1/2 MNOs managing interconnect fraud, billing integrity, and policy optimization.
+
+#### 1.1 Theoretical Grounding
+
+CDIE's core premise — that robust decision-making requires explicit causal structure — is now formally supported by Richens & Everitt (ICLR 2024, "Robust agents learn causal world models"), who prove that *any* agent satisfying a regret bound across distributional shifts must have learned an approximate causal model of the data-generating process. Their result is model-independent: it applies whether the agent is a neural network, a rule-based system, or a human operator. This validates CDIE's architectural choice to invest in explicit causal discovery (GFCI) and structural refutation (DoWhy) rather than relying on correlational feature-importance methods like SHAP, which cannot distinguish genuine causal mechanisms from confounded associations that break under distribution shift — precisely the failure mode that costs telecom operators $3.8B annually.
 
 ---
 
@@ -41,7 +45,7 @@ The online phase provides **sub-200ms causal intervention lookup** via the pre-c
 
 1. **TEI Embedding** (BAAI/bge-base-en-v1.5, 768-dim) — embeds the query into a dense vector
 2. **Cosine Retrieval** — retrieves top-6 candidate playbooks from a telecom fraud knowledge base
-3. **TEI Reranking** (BAAI/bge-reranker-base) — cross-encoder re-ranking for precision scoring
+3. **TEI Reranking** (BAAI/bge-reranker-base) — cross-encoder re-ranking for precision scoring. This two-stage design is motivated by the embedding precision ceiling identified by Weller et al. (2025): single-vector bi-encoders encode query and document independently, losing token-level interaction signals (negations, causal qualifiers) that are critical for telecom fraud queries. The cross-encoder reranker jointly attends to query–document pairs, recovering the fine-grained relevance that fixed-dimensional embeddings provably cannot capture as corpus complexity grows.
 4. **OPEA LLM TextGen** (Intel/neural-chat-7b-v3-3 via TGI) — generates a structured "OPEA Causal Intelligence Report" combining causal ATE evidence with RAG-retrieved playbook recommendations
 5. **Graceful Fallback** — OPEA → OpenAI API → rule-based templates (degradation at every layer)
 
@@ -54,7 +58,7 @@ Interactive causal DAG visualization with **Human-in-the-Loop (HITL)** edge reje
 ### 3. OPEA Component Usage
 
 | # | OPEA Component | Docker Image | Model | Role in CDIE |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | 1 | **LLM TextGen** | `opea/llm-textgen:latest` | Intel/neural-chat-7b-v3-3 | OPEA Causal Intelligence Report generation via `/v1/chat/completions` |
 | 2 | **TEI Embedding** | `ghcr.io/huggingface/text-embeddings-inference:cpu-latest` | BAAI/bge-base-en-v1.5 | 768-dim dense vector semantic retrieval over telecom playbooks |
 | 3 | **TEI Reranking** | `ghcr.io/huggingface/text-embeddings-inference:cpu-latest` | BAAI/bge-reranker-base | Cross-encoder passage re-ranking for retrieval precision |
@@ -67,7 +71,7 @@ All three services are orchestrated via `docker-compose.yml` and configured with
 
 **One-Click Setup** via `setup.sh` (Linux/Mac) or `setup.cmd` (Windows):
 
-```
+```bash
 git clone <repo> && cd cdie-v4
 cp .env.example .env   # Set HF_TOKEN
 chmod +x setup.sh && ./setup.sh
@@ -113,4 +117,4 @@ This project represents a prototype bridging causal AI and generative LLMs. Seve
 
 ---
 
-*License: MIT | OPEA Components: 3 | Total RAM: ~57GB | Setup Time: < 10 minutes*
+License: MIT | OPEA Components: 3 | Total RAM: ~57GB | Setup Time: < 10 minutes

@@ -3,7 +3,6 @@ CDIE v4 — Integration Tests for FastAPI Endpoints
 Tests all API endpoints using FastAPI TestClient to ensure no 500 errors.
 """
 
-import pytest  # type: ignore
 from fastapi.testclient import TestClient  # type: ignore
 import sys
 from pathlib import Path

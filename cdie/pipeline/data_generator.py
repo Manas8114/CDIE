@@ -7,11 +7,14 @@ Domain: Telecom SIM Box Fraud Detection (ITU AI4Good / OPEA Challenge)
 
 import os
 import pickle
+from typing import Any
 import numpy as np
 import pandas as pd
 from pathlib import Path
 
-DATA_DIR = Path(os.environ.get("CDIE_DATA_DIR", Path(__file__).parent.parent.parent / "data"))
+DATA_DIR = Path(
+    os.environ.get("CDIE_DATA_DIR", Path(__file__).parent.parent.parent / "data")
+)
 
 VARIABLE_NAMES = [
     "CallDataRecordVolume",
@@ -52,6 +55,7 @@ GROUND_TRUTH_EDGES = [
 def generate_ground_truth_dag():
     """Build the ground truth DAG as an adjacency dict."""
     import networkx as nx
+
     G = nx.DiGraph()
     G.add_nodes_from(VARIABLE_NAMES)
     G.add_edges_from(GROUND_TRUTH_EDGES)
@@ -73,32 +77,26 @@ def generate_scm_data(n_samples: int = 2000, seed: int = 42) -> pd.DataFrame:
     data["CallDataRecordVolume"] = rng.normal(1000, 200, n_samples)
 
     # ITURegulatoryPressure <- RegulatorySignal
-    data["ITURegulatoryPressure"] = (
-        0.4 * data["RegulatorySignal"]
-        + rng.normal(30, 8, n_samples)
+    data["ITURegulatoryPressure"] = 0.4 * data["RegulatorySignal"] + rng.normal(
+        30, 8, n_samples
     )
 
     # FraudPolicyStrictness <- ITURegulatoryPressure (Discrete levels 1-5)
-    raw_strictness = (
-        0.5 * data["ITURegulatoryPressure"]
-        + rng.normal(40, 10, n_samples)
-    )
+    raw_strictness = 0.5 * data["ITURegulatoryPressure"] + rng.normal(40, 10, n_samples)
     # Map to 5 discrete levels
     data["FraudPolicyStrictness"] = pd.cut(
         raw_strictness, bins=5, labels=[1, 2, 3, 4, 5]
     ).astype(float)
 
     # SIMBoxFraudAttempts <- CallDataRecordVolume
-    data["SIMBoxFraudAttempts"] = (
-        0.03 * data["CallDataRecordVolume"]
-        + rng.normal(20, 8, n_samples)
+    data["SIMBoxFraudAttempts"] = 0.03 * data["CallDataRecordVolume"] + rng.normal(
+        20, 8, n_samples
     )
     data["SIMBoxFraudAttempts"] = np.maximum(data["SIMBoxFraudAttempts"], 0)
 
     # NetworkLoad <- CallDataRecordVolume
-    data["NetworkLoad"] = (
-        0.05 * data["CallDataRecordVolume"]
-        + rng.normal(30, 10, n_samples)
+    data["NetworkLoad"] = 0.05 * data["CallDataRecordVolume"] + rng.normal(
+        30, 10, n_samples
     )
 
     # SIMFraudDetectionRate <- SIMBoxFraudAttempts + FraudPolicyStrictness
@@ -166,7 +164,7 @@ def preprocess_data(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     check multicollinearity, run ADF stationarity tests.
     Returns cleaned data and preprocessing report.
     """
-    report = {
+    report: dict[str, Any] = {
         "imputed_counts": {},
         "winsorized_counts": {},
         "collinear_pairs": [],
@@ -211,6 +209,7 @@ def preprocess_data(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
 
     # 5. ADF stationarity tests
     from statsmodels.tsa.stattools import adfuller
+
     for col in numeric_cols:
         if col in report["constant_variables"]:
             continue
@@ -222,7 +221,11 @@ def preprocess_data(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
                 "stationary": result[1] < 0.05,
             }
         except Exception:
-            report["adf_results"][col] = {"adf_statistic": None, "p_value": None, "stationary": None}
+            report["adf_results"][col] = {
+                "adf_statistic": None,
+                "p_value": None,
+                "stationary": None,
+            }
 
     return df, report
 
@@ -247,7 +250,9 @@ def run(output_dir: Path = None) -> tuple[pd.DataFrame, dict, object]:
     print(f"[DataGen] Generated {len(df)} samples × {len(df.columns)} columns")
 
     df, report = preprocess_data(df)
-    print(f"[DataGen] Preprocessing complete. Winsorized: {sum(report['winsorized_counts'].values())} values")
+    print(
+        f"[DataGen] Preprocessing complete. Winsorized: {sum(report['winsorized_counts'].values())} values"
+    )
 
     csv_path, dag_path = save_data(df, dag, output_dir)
     print(f"[DataGen] Saved to {csv_path} and {dag_path}")

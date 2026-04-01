@@ -14,7 +14,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 API_URL = os.environ.get("API_URL", "http://localhost:8000")
-DATA_DIR = Path(os.environ.get("CDIE_DATA_DIR", Path(__file__).parent.parent.parent / "data"))
+DATA_DIR = Path(
+    os.environ.get("CDIE_DATA_DIR", Path(__file__).parent.parent.parent / "data")
+)
 
 st.set_page_config(
     page_title="CDIE v4 — Causal Command Center",
@@ -26,7 +28,8 @@ st.set_page_config(
 # ──────────────────────────────────────────────
 # Semantic CSS — Premium dark theme + Sequential Flow
 # ──────────────────────────────────────────────
-st.markdown("""
+st.markdown(
+    """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
@@ -178,7 +181,10 @@ h2, h3, h4 { color: var(--text-primary); font-weight: 800; letter-spacing: -0.5p
 .stSelectbox > div > div { background: rgba(15, 23, 42, 0.8) !important; border-radius: 12px !important; }
 
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
+
 
 # ──────────────────────────────────────────────
 # Helper Functions
@@ -186,17 +192,26 @@ h2, h3, h4 { color: var(--text-primary); font-weight: 800; letter-spacing: -0.5p
 def api_call(endpoint, method="GET", data=None):
     try:
         url = f"{API_URL}{endpoint}"
-        resp = requests.post(url, json=data, timeout=30) if method == "POST" else requests.get(url, timeout=10)
+        resp = (
+            requests.post(url, json=data, timeout=30)
+            if method == "POST"
+            else requests.get(url, timeout=10)
+        )
         return resp.json() if resp.status_code == 200 else None
-    except: return None
+    except Exception:
+        return None
+
 
 @st.cache_data(ttl=300)
 def get_safety_map():
-    if api_call("/metadata"): return "api"
+    if api_call("/metadata"):
+        return "api"
     sm_path = DATA_DIR / "safety_map.json"
     if sm_path.exists():
-        with open(sm_path) as f: return json.load(f)
+        with open(sm_path) as f:
+            return json.load(f)
     return None
+
 
 sm_source = get_safety_map()
 sm_data = sm_source if isinstance(sm_source, dict) else None
@@ -204,14 +219,18 @@ sm_data = sm_source if isinstance(sm_source, dict) else None
 # ──────────────────────────────────────────────
 # 1. HEADER & QUERY PIPELINE
 # ──────────────────────────────────────────────
-st.markdown("""
+st.markdown(
+    """
 <div class="cdie-header">
     <h1>Causal Command Center</h1>
     <div class="subtitle">Evidence Flow Interface</div>
 </div>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
-st.markdown("""
+st.markdown(
+    """
 <div class="pipeline-bar">
     <div class="pipeline-step active">CATL ✓</div>
     <div class="pipeline-arrow">→</div>
@@ -223,38 +242,58 @@ st.markdown("""
     <div class="pipeline-arrow">→</div>
     <div class="pipeline-step active" style="background:var(--color-causal);color:white;box-shadow:0 0 15px rgba(59,130,246,0.4);">Ready</div>
 </div>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 col_q, col_p = st.columns([3, 1])
-with col_q: 
-    query_text = st.text_input("🔍 Ask a causal question", placeholder="e.g., What happens if fraud attempts increase by 30%?", label_visibility="collapsed")
-with col_p: 
-    preset = st.selectbox("Quick queries", ["Custom", "Fraud +30%", "Policy +20%", "Root Cause", "Temporal"], label_visibility="collapsed")
+with col_q:
+    query_text = st.text_input(
+        "🔍 Ask a causal question",
+        placeholder="e.g., What happens if fraud attempts increase by 30%?",
+        label_visibility="collapsed",
+    )
+with col_p:
+    preset = st.selectbox(
+        "Quick queries",
+        ["Custom", "Fraud +30%", "Policy +20%", "Root Cause", "Temporal"],
+        label_visibility="collapsed",
+    )
 
-if preset == "Fraud +30%": query_text = "What happens if fraud attempts increase by 30%?"
-elif preset == "Policy +20%": query_text = "What if we increase detection policy strictness by 20%?"
-elif preset == "Root Cause": query_text = "Why did chargeback volume increase?"
-elif preset == "Temporal": query_text = "When does a change in fraud attempts affect chargebacks?"
+if preset == "Fraud +30%":
+    query_text = "What happens if fraud attempts increase by 30%?"
+elif preset == "Policy +20%":
+    query_text = "What if we increase detection policy strictness by 20%?"
+elif preset == "Root Cause":
+    query_text = "Why did chargeback volume increase?"
+elif preset == "Temporal":
+    query_text = "When does a change in fraud attempts affect chargebacks?"
 
 query_result = None
 if query_text:
     with st.spinner("Processing..."):
         api_res = api_call("/query", "POST", {"query": query_text})
-        if api_res: query_result = api_res
+        if api_res:
+            query_result = api_res
 
 if isinstance(query_result, dict) and query_result:
     effect = query_result.get("effect") or {}
     point = effect.get("point_estimate", 0) if isinstance(effect, dict) else 0
-    ci_lower = effect.get("ci_lower", point * 0.8) if isinstance(effect, dict) else point * 0.8
-    ci_upper = effect.get("ci_upper", point * 1.2) if isinstance(effect, dict) else point * 1.2
-    
+    ci_lower = (
+        effect.get("ci_lower", point * 0.8) if isinstance(effect, dict) else point * 0.8
+    )
+    ci_upper = (
+        effect.get("ci_upper", point * 1.2) if isinstance(effect, dict) else point * 1.2
+    )
+
     dir_sign = "+" if point >= 0 else ""
     color_cls = "positive" if point >= 0 else ""
     conf_label = query_result.get("confidence_label", "ESTIMATED")
-    
+
     if conf_label == "UNPROVEN":
         conf_cls = "conf-unproven"
-        st.markdown('''
+        st.markdown(
+            """
         <style>
             .verdict-panel { 
                 background: linear-gradient(180deg, rgba(220,38,38,0.2) 0%, rgba(15,23,42,0.95) 100%);
@@ -265,57 +304,86 @@ if isinstance(query_result, dict) and query_result:
                 background: rgba(239,68,68,0.15); color: #fca5a5; border-color: #ef4444; box-shadow: 0 0 24px rgba(239,68,68,0.4); 
             }
         </style>
-        ''', unsafe_allow_html=True)
+        """,
+            unsafe_allow_html=True,
+        )
     else:
         conf_cls = "conf-high" if conf_label in ("VALIDATED", "HIGH") else "conf-low"
-    
+
     # ──────────────────────────────────────────
     # 2. VERDICT PANEL
     # ──────────────────────────────────────────
     st.markdown('<div class="flow-arrow">▼</div>', unsafe_allow_html=True)
 
     if conf_label == "UNPROVEN":
-        st.error("**CAUSALITY UNPROVEN**: Refutation tests failed or unobserved confounders detected. Do not deploy this intervention. A/B testing is mandated.")
-    st.markdown(f"""
+        st.error(
+            "**CAUSALITY UNPROVEN**: Refutation tests failed or unobserved confounders detected. Do not deploy this intervention. A/B testing is mandated."
+        )
+    st.markdown(
+        f"""
     <div class="verdict-panel">
         <div class="verdict-number {color_cls}">{dir_sign}{point:.1f}</div>
-        <div class="verdict-label">{query_result.get('target', 'Target')}</div>
+        <div class="verdict-label">{query_result.get("target", "Target")}</div>
         <div class="verdict-ci">95% Confidence: <span>[{dir_sign}{ci_lower:.2f} → {dir_sign}{ci_upper:.2f}]</span></div>
         <div class="confidence-badge {conf_cls}">{conf_label}</div>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
     # ──────────────────────────────────────────
     # 3. CAUSAL GRAPH
     # ──────────────────────────────────────────
     st.markdown('<div class="flow-arrow">▼</div>', unsafe_allow_html=True)
     st.markdown("### 🧠 Causal Proof (Animated)")
-    
-    graph_data = api_call("/graph") if sm_source == "api" else sm_data.get("graph", {}) if sm_data else {}
+
+    graph_data = (
+        api_call("/graph")
+        if sm_source == "api"
+        else sm_data.get("graph", {})
+        if sm_data
+        else {}
+    )
     if graph_data and graph_data.get("edges"):
         try:
             import networkx as nx  # type: ignore
             from pyvis.network import Network  # type: ignore
             import streamlit.components.v1 as components  # type: ignore
+
             G = nx.DiGraph()
-            if not isinstance(query_result, dict): query_result = {}
-            if not isinstance(graph_data, dict): graph_data = {}
-            
+            if not isinstance(query_result, dict):
+                query_result = {}
+            if not isinstance(graph_data, dict):
+                graph_data = {}
+
             src_var = query_result.get("source", "")
             tgt_var = query_result.get("target", "")
 
             for node in graph_data.get("nodes", []):  # type: ignore
-                if not isinstance(node, dict): continue
+                if not isinstance(node, dict):
+                    continue
                 nid = node.get("id", node.get("label", ""))  # type: ignore
-                color = "#3b82f6" if nid == src_var else "#ef4444" if nid == tgt_var else "#1e293b"
-                G.add_node(nid, color=color, borderWidth=2, font={"color": "#f8fafc", "size": 15})
+                color = (
+                    "#3b82f6"
+                    if nid == src_var
+                    else "#ef4444"
+                    if nid == tgt_var
+                    else "#1e293b"
+                )
+                G.add_node(
+                    nid,
+                    color=color,
+                    borderWidth=2,
+                    font={"color": "#f8fafc", "size": 15},
+                )
 
             for edge in graph_data.get("edges", []):  # type: ignore
-                if not isinstance(edge, dict): continue
+                if not isinstance(edge, dict):
+                    continue
                 src = edge.get("from", edge.get("source", ""))  # type: ignore
                 tgt = edge.get("to", edge.get("target", ""))  # type: ignore
                 status = edge.get("refutation_status", "UNKNOWN")  # type: ignore
-                
+
                 # Active path highlight
                 if src == src_var and tgt == tgt_var:
                     e_col = "#3b82f6"
@@ -325,13 +393,22 @@ if isinstance(query_result, dict) and query_result:
                     w = 1.5
                 G.add_edge(src, tgt, color=e_col, width=w)
 
-            net = Network(height="450px", width="100%", directed=True, bgcolor="#0f172a", font_color="#f8fafc")
+            net = Network(
+                height="450px",
+                width="100%",
+                directed=True,
+                bgcolor="#0f172a",
+                font_color="#f8fafc",
+            )
             net.from_nx(G)
-            net.set_options('{"physics": {"forceAtlas2Based": {"gravitationalConstant": -60}}, "edges": {"smooth": {"type": "cubicBezier"}}}')
+            net.set_options(
+                '{"physics": {"forceAtlas2Based": {"gravitationalConstant": -60}}, "edges": {"smooth": {"type": "cubicBezier"}}}'
+            )
             html_path = DATA_DIR / "graph.html"
             html_path.parent.mkdir(parents=True, exist_ok=True)
             net.save_graph(str(html_path))
-            with open(html_path, "r", encoding="utf-8") as f: components.html(f.read(), height=470, scrolling=False)
+            with open(html_path, "r", encoding="utf-8") as f:
+                components.html(f.read(), height=470, scrolling=False)
         except Exception as e:
             st.error(f"Could not render graph: {e}")
 
@@ -340,60 +417,81 @@ if isinstance(query_result, dict) and query_result:
     # ──────────────────────────────────────────
     st.markdown('<div class="flow-arrow">▼</div>', unsafe_allow_html=True)
     c_val, c_ast = st.columns(2)
-    
+
     with c_val:
         ref = query_result.get("refutation_status", {})
         if isinstance(ref, dict):
             p = ref.get("placebo", "NOT_TESTED")
             c = ref.get("confounder", "NOT_TESTED")
             s = ref.get("subset", "NOT_TESTED")
-        else: p = c = s = "NOT_TESTED"
-        
-        score = int(sum(1 for x in [p, c, s] if x == "PASS") / 3 * 100)
-        m_col = "var(--color-valid)" if score == 100 else "var(--color-uncertain)" if score > 0 else "var(--color-impact)"
+        else:
+            p = c = s = "NOT_TESTED"
+
+        score = int(sum(1 for x in [p, c, s] if x == "PASS") * 100 // 3)
+        m_col = (
+            "var(--color-valid)"
+            if score == 100
+            else "var(--color-uncertain)"
+            if score > 0
+            else "var(--color-impact)"
+        )
         m_shad = f"box-shadow: 0 0 15px {m_col};"
-        
-        st.markdown(f"""
+
+        st.markdown(
+            f"""
         <div class="glass-card">
             <h3 style="margin:0;">🛡️ VALIDATION SCORE: {score}%</h3>
             <div class="val-meter-bg"><div class="val-meter-fill" style="width:{score}%; background:{m_col}; {m_shad}"></div></div>
             <div class="trust-checklist">
-                <div class="trust-item"><span class="trust-icon {'pass' if p=='PASS' else 'warn'}">{'✔' if p=='PASS' else '⚠'}</span> Placebo Treatment</div>
-                <div class="trust-item"><span class="trust-icon {'pass' if c=='PASS' else 'warn'}">{'✔' if c=='PASS' else '⚠'}</span> Random Confounder</div>
-                <div class="trust-item"><span class="trust-icon {'pass' if s=='PASS' else 'warn'}">{'✔' if s=='PASS' else '⚠'}</span> Data Subset Stability</div>
+                <div class="trust-item"><span class="trust-icon {"pass" if p == "PASS" else "warn"}">{"✔" if p == "PASS" else "⚠"}</span> Placebo Treatment</div>
+                <div class="trust-item"><span class="trust-icon {"pass" if c == "PASS" else "warn"}">{"✔" if c == "PASS" else "⚠"}</span> Random Confounder</div>
+                <div class="trust-item"><span class="trust-icon {"pass" if s == "PASS" else "warn"}">{"✔" if s == "PASS" else "⚠"}</span> Data Subset Stability</div>
             </div>
         </div>
-        """, unsafe_allow_html=True)
+        """,
+            unsafe_allow_html=True,
+        )
 
     with c_ast:
-        catl_data = api_call("/catl") if sm_source == "api" else sm_data.get("catl", {}) if sm_data else {}
+        catl_data = (
+            api_call("/catl")
+            if sm_source == "api"
+            else sm_data.get("catl", {})
+            if sm_data
+            else {}
+        )
         h_html = ""
         if isinstance(catl_data, dict) and catl_data:
             for k, v in catl_data.items():
-                if not isinstance(v, dict): continue
+                if not isinstance(v, dict):
+                    continue
                 stt = v.get("status", "UNKNOWN")
                 icon = "✔" if stt == "PASS" else "⚠" if stt == "WARN" else "✗"
                 cls = "pass" if stt == "PASS" else "warn" if stt == "WARN" else "fail"
                 h_html += f'<div class="trust-item"><span class="trust-icon {cls}">{icon}</span> {k.capitalize()}</div>'
                 if stt == "WARN":
                     h_html += f'<div class="assumption-hint">→ May affect accuracy by ~5–10% ({v.get("tooltip", "")[:40]}...)</div>'
-        
-        st.markdown(f"""
+
+        st.markdown(
+            f"""
         <div class="glass-card">
             <h3 style="margin:0 0 20px 0;">⚠️ ASSUMPTION INTELLIGENCE</h3>
             <div class="trust-checklist">{h_html}</div>
         </div>
-        """, unsafe_allow_html=True)
+        """,
+            unsafe_allow_html=True,
+        )
 
     # ──────────────────────────────────────────
     # 5. COMPARISON
     # ──────────────────────────────────────────
     st.markdown('<div class="flow-arrow">▼</div>', unsafe_allow_html=True)
     st.markdown("### 📉 Correlation vs Causation — The Critical Difference")
-    
+
     cb1, cb2 = st.columns(2)
     with cb1:
-        st.markdown("""
+        st.markdown(
+            """
         <div class="comp-card comp-wrong">
             <div class="comp-header">🔴 Wrong AI (XGBoost)</div>
             <p style="font-size:1.05rem;"><strong>Decision:</strong> Optimize highly correlated features randomly.</p>
@@ -402,24 +500,32 @@ if isinstance(query_result, dict) and query_result:
                 → Long-term target remains unchanged or worsens ❌
             </p>
         </div>
-        """, unsafe_allow_html=True)
+        """,
+            unsafe_allow_html=True,
+        )
     with cb2:
-        st.markdown(f"""
+        st.markdown(
+            f"""
         <div class="comp-card comp-right">
             <div class="comp-header">🟢 Your AI (CDIE)</div>
-            <p style="font-size:1.05rem;"><strong>Decision:</strong> Target the root cause ({query_result.get('source', '')}).</p>
+            <p style="font-size:1.05rem;"><strong>Decision:</strong> Target the root cause ({query_result.get("source", "")}).</p>
             <p style="color:var(--text-secondary); margin-top:12px; line-height:1.6;">
-                → {query_result.get('target', '')} changes by {dir_sign}{abs(point):.1f} ✔<br>
+                → {query_result.get("target", "")} changes by {dir_sign}{abs(point):.1f} ✔<br>
                 → Validated mathematically by do-calculus.
             </p>
         </div>
-        """, unsafe_allow_html=True)
-    
-    st.markdown("""
+        """,
+            unsafe_allow_html=True,
+        )
+
+    st.markdown(
+        """
     <div class="insight-box" style="margin-top:20px; text-align:center; border-left:none; border-top:4px solid var(--color-causal); border-radius:0 0 12px 12px;">
         <strong>Key Difference:</strong> Correlation misleads due to shared causes (Simpson's Paradox). CDIE's causal model identifies the exact physical driver and isolates its standalone effect.
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
     # ──────────────────────────────────────────
     # 6. SEGMENTS & BENCHMARK
@@ -434,24 +540,48 @@ if isinstance(query_result, dict) and query_result:
             for seg in cates:
                 if isinstance(seg, dict):
                     risk = seg.get("risk_level", "Low")
-                    emoji = "🔴 Critical" if risk == "Critical" else "🟠 High" if risk == "High" else "🟢 Low"
-                    rows.append({"Segment": seg.get("segment", "?"), "Impact": f"{seg.get('ate',0):.3f}", "CI": f"[{seg.get('ci_lower',0):.3f}, {seg.get('ci_upper',0):.3f}]", "Risk": emoji})
+                    emoji = (
+                        "🔴 Critical"
+                        if risk == "Critical"
+                        else "🟠 High"
+                        if risk == "High"
+                        else "🟢 Low"
+                    )
+                    rows.append(
+                        {
+                            "Segment": seg.get("segment", "?"),
+                            "Impact": f"{seg.get('ate', 0):.3f}",
+                            "CI": f"[{seg.get('ci_lower', 0):.3f}, {seg.get('ci_upper', 0):.3f}]",
+                            "Risk": emoji,
+                        }
+                    )
             st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
         else:
             st.info("No segment-level CATE data available for this query.")
 
     with cx:
         st.markdown("### 📈 Structural Reliability")
-        bench = api_call("/benchmark") if sm_source == "api" else sm_data.get("benchmarks", {}) if sm_data else {}
-        acc = bench.get("own_scm", {}).get("f1", 0) * 100 if bench and isinstance(bench, dict) else 0
-        
+        bench = (
+            api_call("/benchmark")
+            if sm_source == "api"
+            else sm_data.get("benchmarks", {})
+            if sm_data
+            else {}
+        )
+        acc = (
+            bench.get("own_scm", {}).get("f1", 0) * 100
+            if bench and isinstance(bench, dict)
+            else 0
+        )
+
         # UI Polish: Show F1/Precision/Recall explicitly if available
         metrics_text = ""
         if acc > 0:
             own = bench.get("own_scm", {})
             metrics_text = f"F1: {own.get('f1', 0):.2f} | P: {own.get('precision', 0):.2f} | R: {own.get('recall', 0):.2f}"
-        
-        st.markdown(f"""
+
+        st.markdown(
+            f"""
         <div class="glass-card" style="padding: 30px;">
             <div style="font-size:3.5rem; font-weight:900; color:var(--color-bench); line-height:1;">{acc:.0f}%</div>
             <div style="font-size:1.15rem; font-weight:700; margin-top:8px; color:var(--text-primary);">Accuracy across simulated ground-truth</div>
@@ -461,7 +591,9 @@ if isinstance(query_result, dict) and query_result:
                 The discovered Directed Acyclic Graph (DAG) has been mathematically validated against standard dataset benchmarks (SACHS / ALARM).
             </div>
         </div>
-        """, unsafe_allow_html=True)
+        """,
+            unsafe_allow_html=True,
+        )
 
     # ──────────────────────────────────────────
     # 7. AUDIT RIBBON
@@ -473,9 +605,10 @@ if isinstance(query_result, dict) and query_result:
     cr = meta.get("created_at", "?") if meta else "?"
     ks = query_result.get("ks_statistic", 0.03)
     ks_lbl = "Stable" if ks < 0.2 else "Shifted"
-    q_id = query_result.get('query_id', '?')
-    
-    st.markdown(f"""
+    q_id = query_result.get("query_id", "?")
+
+    st.markdown(
+        f"""
     <div class="audit-ribbon">
         <div style="display:flex; gap:20px; flex-wrap:wrap;">
             <div class="audit-item">Query ID: <strong>#{q_id}</strong></div>
@@ -485,18 +618,27 @@ if isinstance(query_result, dict) and query_result:
             <div class="audit-item">Generated: <strong>{cr}</strong></div>
         </div>
     </div>
-    """, unsafe_allow_html=True)
-    
+    """,
+        unsafe_allow_html=True,
+    )
+
     col_btn1, col_btn2, _ = st.columns([1, 1, 4])
     with col_btn1:
         if st.button("📋 Copy Hash", use_container_width=True):
             st.toast(f"Hash copied: {h}...", icon="✅")
     with col_btn2:
         report_data = json.dumps(query_result, indent=2) if query_result else "{}"
-        st.download_button("📄 Export Report", data=report_data, file_name=f"cdie_report_{q_id}.json", mime="application/json", use_container_width=True)
+        st.download_button(
+            "📄 Export Report",
+            data=report_data,
+            file_name=f"cdie_report_{q_id}.json",
+            mime="application/json",
+            use_container_width=True,
+        )
 
 else:
-    st.markdown("""
+    st.markdown(
+        """
     <div class="glass-card" style="text-align:center;padding:80px 20px;">
         <h2 style="color:var(--text-primary);font-weight:900;font-size:2rem;">Enter a Query to Begin</h2>
         <p style="color:var(--text-secondary);max-width:600px;margin:20px auto;font-size:1.1rem;line-height:1.6;">
@@ -504,11 +646,24 @@ else:
             <strong style="color:var(--color-causal);">validated causal effect</strong>, not just a fragile correlation.
         </p>
     </div>
-    """, unsafe_allow_html=True)
-    
+    """,
+        unsafe_allow_html=True,
+    )
+
     m1, m2, m3 = st.columns(3)
     c_st = "text-align:center; padding:30px; background:rgba(255,255,255,0.02); border-radius:16px; border:1px solid var(--border-glass);"
-    with m1: st.markdown(f'<div style="{c_st}"><h2 style="margin:0;font-size:3rem;color:var(--text-primary);">12</h2><p style="color:var(--text-secondary);font-size:1.1rem;margin:10px 0 0 0;">Causal Variables</p></div>', unsafe_allow_html=True)
-    with m2: st.markdown(f'<div style="{c_st}"><h2 style="margin:0;font-size:3rem;color:var(--color-valid);">Live</h2><p style="color:var(--text-secondary);font-size:1.1rem;margin:10px 0 0 0;">Safety Map Integrity</p></div>', unsafe_allow_html=True)
-    with m3: st.markdown(f'<div style="{c_st}"><h2 style="margin:0;font-size:3rem;color:var(--text-primary);">&lt;200ms</h2><p style="color:var(--text-secondary);font-size:1.1rem;margin:10px 0 0 0;">Lookup Latency</p></div>', unsafe_allow_html=True)
-
+    with m1:
+        st.markdown(
+            f'<div style="{c_st}"><h2 style="margin:0;font-size:3rem;color:var(--text-primary);">12</h2><p style="color:var(--text-secondary);font-size:1.1rem;margin:10px 0 0 0;">Causal Variables</p></div>',
+            unsafe_allow_html=True,
+        )
+    with m2:
+        st.markdown(
+            f'<div style="{c_st}"><h2 style="margin:0;font-size:3rem;color:var(--color-valid);">Live</h2><p style="color:var(--text-secondary);font-size:1.1rem;margin:10px 0 0 0;">Safety Map Integrity</p></div>',
+            unsafe_allow_html=True,
+        )
+    with m3:
+        st.markdown(
+            f'<div style="{c_st}"><h2 style="margin:0;font-size:3rem;color:var(--text-primary);">&lt;200ms</h2><p style="color:var(--text-secondary);font-size:1.1rem;margin:10px 0 0 0;">Lookup Latency</p></div>',
+            unsafe_allow_html=True,
+        )

@@ -55,16 +55,36 @@ def evaluate_sachs():
 
     # SACHS ground truth (11 nodes, 17 edges)
     sachs_variables = [
-        "Raf", "Mek", "Plcg", "PIP2", "PIP3",
-        "Erk", "Akt", "PKA", "PKC", "P38", "Jnk"
+        "Raf",
+        "Mek",
+        "Plcg",
+        "PIP2",
+        "PIP3",
+        "Erk",
+        "Akt",
+        "PKA",
+        "PKC",
+        "P38",
+        "Jnk",
     ]
     sachs_true_edges = [
-        ("Raf", "Mek"), ("Mek", "Erk"), ("PKC", "Raf"),
-        ("PKC", "Mek"), ("PKC", "PKA"), ("PKC", "P38"),
-        ("PKC", "Jnk"), ("PKA", "Raf"), ("PKA", "Mek"),
-        ("PKA", "Erk"), ("PKA", "Akt"), ("PKA", "P38"),
-        ("PKA", "Jnk"), ("Plcg", "PIP2"), ("Plcg", "PIP3"),
-        ("PIP3", "PIP2"), ("Erk", "Akt"),
+        ("Raf", "Mek"),
+        ("Mek", "Erk"),
+        ("PKC", "Raf"),
+        ("PKC", "Mek"),
+        ("PKC", "PKA"),
+        ("PKC", "P38"),
+        ("PKC", "Jnk"),
+        ("PKA", "Raf"),
+        ("PKA", "Mek"),
+        ("PKA", "Erk"),
+        ("PKA", "Akt"),
+        ("PKA", "P38"),
+        ("PKA", "Jnk"),
+        ("Plcg", "PIP2"),
+        ("Plcg", "PIP3"),
+        ("PIP3", "PIP2"),
+        ("Erk", "Akt"),
     ]
 
     try:
@@ -74,6 +94,7 @@ def evaluate_sachs():
         # Try loading SACHS data from causal-learn
         try:
             from causallearn.utils.Dataset import load_dataset
+
             data = load_dataset("sachs")
             if hasattr(data, "values"):
                 data_matrix = data.values
@@ -104,17 +125,33 @@ def evaluate_sachs():
     except ImportError:
         # Provide realistic benchmark values if causal-learn unavailable
         metrics = {
-            "precision": 0.82, "recall": 0.65, "f1": 0.72, "shd": 7,
-            "tp": 11, "fp": 2, "fn": 6, "additions": 1, "deletions": 5, "reversals": 1,
-            "status": "SIMULATED", "n_discovered": 13, "algorithm": "GFCI",
+            "precision": 0.82,
+            "recall": 0.65,
+            "f1": 0.72,
+            "shd": 7,
+            "tp": 11,
+            "fp": 2,
+            "fn": 6,
+            "additions": 1,
+            "deletions": 5,
+            "reversals": 1,
+            "status": "SIMULATED",
+            "n_discovered": 13,
+            "algorithm": "GFCI",
         }
     except Exception as e:
         metrics = {
-            "precision": 0.82, "recall": 0.65, "f1": 0.72, "shd": 7,
-            "status": f"SIMULATED (error: {str(e)[:40]})", "algorithm": "GFCI",
+            "precision": 0.82,
+            "recall": 0.65,
+            "f1": 0.72,
+            "shd": 7,
+            "status": f"SIMULATED (error: {str(e)[:40]})",
+            "algorithm": "GFCI",
         }
 
-    print(f"[Benchmark] SACHS: P={metrics['precision']}, R={metrics['recall']}, F1={metrics['f1']}, SHD={metrics['shd']}")
+    print(
+        f"[Benchmark] SACHS: P={metrics['precision']}, R={metrics['recall']}, F1={metrics['f1']}, SHD={metrics['shd']}"
+    )
     return metrics
 
 
@@ -138,7 +175,12 @@ def evaluate_alarm():
 
         # Approximate metrics (true ALARM graph has ~46 edges)
         adj = g.graph
-        n_edges = sum(1 for i in range(37) for j in range(37) if i != j and adj[i, j] != 0 and adj[j, i] != 0)
+        n_edges = sum(
+            1
+            for i in range(37)
+            for j in range(37)
+            if i != j and adj[i, j] != 0 and adj[j, i] != 0
+        )
 
         metrics = {
             "precision": round(min(0.78, 0.5 + rng.random() * 0.3), 4),
@@ -148,24 +190,40 @@ def evaluate_alarm():
             "n_discovered": n_edges,
             "algorithm": "GFCI",
         }
-        metrics["f1"] = round(2 * metrics["precision"] * metrics["recall"] / max(metrics["precision"] + metrics["recall"], 1e-10), 4)
+        metrics["f1"] = round(
+            2
+            * metrics["precision"]
+            * metrics["recall"]
+            / max(metrics["precision"] + metrics["recall"], 1e-10),
+            4,
+        )
 
     except Exception:
         metrics = {
-            "precision": 0.74, "recall": 0.58, "f1": 0.65, "shd": 14,
-            "status": "SIMULATED", "algorithm": "GFCI",
+            "precision": 0.74,
+            "recall": 0.58,
+            "f1": 0.65,
+            "shd": 14,
+            "status": "SIMULATED",
+            "algorithm": "GFCI",
         }
 
-    print(f"[Benchmark] ALARM: P={metrics['precision']}, R={metrics['recall']}, F1={metrics['f1']}, SHD={metrics['shd']}")
+    print(
+        f"[Benchmark] ALARM: P={metrics['precision']}, R={metrics['recall']}, F1={metrics['f1']}, SHD={metrics['shd']}"
+    )
     return metrics
 
 
 def evaluate_own_graph(discovered_edges, ground_truth_edges, variable_names):
     """Evaluate discovered graph against our own SCM ground truth."""
     print("[Benchmark] Evaluating discovery against SCM ground truth...")
-    metrics = compute_graph_metrics(discovered_edges, ground_truth_edges, variable_names)
+    metrics = compute_graph_metrics(
+        discovered_edges, ground_truth_edges, variable_names
+    )
     metrics["status"] = "COMPLETE"
-    print(f"[Benchmark] Own SCM: P={metrics['precision']}, R={metrics['recall']}, F1={metrics['f1']}, SHD={metrics['shd']}")
+    print(
+        f"[Benchmark] Own SCM: P={metrics['precision']}, R={metrics['recall']}, F1={metrics['f1']}, SHD={metrics['shd']}"
+    )
     return metrics
 
 
@@ -179,7 +237,9 @@ def run_benchmarks(discovered_edges=None, ground_truth_edges=None, variable_name
     }
 
     if discovered_edges and ground_truth_edges:
-        report["own_scm"] = evaluate_own_graph(discovered_edges, ground_truth_edges, variable_names)
+        report["own_scm"] = evaluate_own_graph(
+            discovered_edges, ground_truth_edges, variable_names
+        )
 
     print("[Benchmark] All benchmarks complete.")
     return report
@@ -188,4 +248,6 @@ def run_benchmarks(discovered_edges=None, ground_truth_edges=None, variable_name
 if __name__ == "__main__":
     report = run_benchmarks()
     for name, metrics in report.items():
-        print(f"\n{name}: P={metrics['precision']}, R={metrics['recall']}, F1={metrics['f1']}, SHD={metrics['shd']}")
+        print(
+            f"\n{name}: P={metrics['precision']}, R={metrics['recall']}, F1={metrics['f1']}, SHD={metrics['shd']}"
+        )

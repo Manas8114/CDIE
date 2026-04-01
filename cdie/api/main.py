@@ -10,30 +10,29 @@ import uuid
 import time
 import psutil  # type: ignore
 from pathlib import Path
-from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, BackgroundTasks, Query  # type: ignore
+from fastapi import FastAPI, HTTPException, UploadFile, File, BackgroundTasks  # type: ignore
 from fastapi.middleware.cors import CORSMiddleware  # type: ignore
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from cdie.api.models import (  # type: ignore
-    QueryRequest, QueryResponse, HealthResponse,
-    ExpertCorrectionRequest, ExpertCorrectionResponse,
-    EffectResult, RefutationStatus, CATESegment
+    QueryRequest,
+    QueryResponse,
+    HealthResponse,
+    ExpertCorrectionRequest,
+    ExpertCorrectionResponse,
+    EffectResult,
+    RefutationStatus,
+    CATESegment,
+    PrescribeRequest,
+    PrescribeResponse,
+    GraphResponse,
+    BenchmarkResponse,
+    CATLResponse,
 )
 from pydantic import BaseModel  # type: ignore
-
-class PrescribeRequest(BaseModel):
-    target: str
-    maximize: bool = True
-    limit: int = 3
-
-class PrescribeResponse(BaseModel):
-    target: str
-    prescriptions: List[Dict[str, Any]]
-    message: str
 
 from cdie.api.lookup import SafetyMapLookup  # type: ignore
 from cdie.api.intent_parser import classify_query, DEMO_QUERIES, VARIABLE_ALIASES  # type: ignore
@@ -56,7 +55,9 @@ app.add_middleware(
 )
 
 # Global instances
-DATA_DIR = Path(os.environ.get("CDIE_DATA_DIR", Path(__file__).parent.parent.parent / "data"))
+DATA_DIR = Path(
+    os.environ.get("CDIE_DATA_DIR", Path(__file__).parent.parent.parent / "data")
+)
 safety_map_lookup = SafetyMapLookup()
 explanation_engine = ExplanationEngine()
 
@@ -64,13 +65,20 @@ explanation_engine = ExplanationEngine()
 @app.on_event("startup")
 async def startup():
     """Load Safety Map on startup."""
-    sm_path = DATA_DIR / "safety_map.json"
-    if sm_path.exists():
-        safety_map_lookup.load(str(sm_path))
-        print(f"[API] Safety Map loaded from {sm_path}")
+    db_path = DATA_DIR / "safety_map.db"
+    json_path = DATA_DIR / "safety_map.json"
+
+    if db_path.exists():
+        safety_map_lookup.load(str(db_path))
+        print(f"[API] Safety Map loaded from {db_path} (SQLite)")
+    elif json_path.exists():
+        safety_map_lookup.load(str(json_path))
+        print(f"[API] Safety Map loaded from {json_path} (Legacy JSON)")
     else:
-        print(f"[API] WARNING: Safety Map not found at {sm_path}")
-        print("[API] Run the offline pipeline first: python -m cdie.pipeline.run_pipeline")
+        print(f"[API] WARNING: Safety Map not found at {db_path} or {json_path}")
+        print(
+            "[API] Run the offline pipeline first: python -m cdie.pipeline.run_pipeline"
+        )
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -93,7 +101,9 @@ async def health():
 async def query(request: QueryRequest):
     """Process a causal query against the Safety Map."""
     if not safety_map_lookup.is_loaded():
-        raise HTTPException(503, "Safety Map not loaded. Run the offline pipeline first.")
+        raise HTTPException(
+            503, "Safety Map not loaded. Run the offline pipeline first."
+        )
 
     query_text = request.query.strip()
     if not query_text:
@@ -107,21 +117,22 @@ async def query(request: QueryRequest):
     # Prioritize DEMO_QUERIES for UI consistency
     if query_text in DEMO_QUERIES:
         preset = DEMO_QUERIES[query_text]
-        source = preset.get("source")
-        target = preset.get("target")
-        magnitude = preset.get("value", 0.1)
+        source = str(preset.get("source") or "")
+        target = str(preset.get("target") or "")
+        magnitude = float(preset.get("value") or 0.1)
     else:
-        source = classification["source"]
-        target = classification["target"]
-        magnitude = classification["magnitude"]
+        source = str(classification["source"] or "")
+        target = str(classification["target"] or "")
+        magnitude = float(classification["magnitude"] or 20.0)
 
     if not source:
-        raise HTTPException(422, "Could not identify a variable in your query. Please check available variables.")
+        raise HTTPException(
+            422,
+            "Could not identify a variable in your query. Please check available variables.",
+        )
 
     # Lookup scenario
     scenario, is_exact = safety_map_lookup.find_best_scenario(source, target, magnitude)
-
-
 
     # Universal fallback: if still no scenario, generate a realistic one from the query variables
     if not scenario and source:
@@ -137,15 +148,33 @@ async def query(request: QueryRequest):
                 "ci_upper": round(fallback_pe * 1.35, 4),
                 "confidence_level": 0.95,
                 "ate_used": fallback_pe,
-                "intervention_amount": magnitude / 100 if magnitude else 0.1
+                "intervention_amount": magnitude / 100 if magnitude else 0.1,
             },
             "causal_path": f"{source} → {target or 'ARPUImpact'}",
             "refutation_status": "ESTIMATED",
             "cate_by_segment": {
-                "Consumer": {"ate": round(fallback_pe * 1.3, 4), "ci_lower": round(fallback_pe * 0.9, 4), "ci_upper": round(fallback_pe * 1.7, 4), "n_samples": 3500, "risk_level": "Low"},
-                "Enterprise": {"ate": round(fallback_pe * 0.85, 4), "ci_lower": round(fallback_pe * 0.5, 4), "ci_upper": round(fallback_pe * 1.2, 4), "n_samples": 1200, "risk_level": "Low"},
-                "MVNO": {"ate": round(fallback_pe * 0.6, 4), "ci_lower": round(fallback_pe * 0.3, 4), "ci_upper": round(fallback_pe * 0.9, 4), "n_samples": 800, "risk_level": "Low"}
-            }
+                "Consumer": {
+                    "ate": round(fallback_pe * 1.3, 4),
+                    "ci_lower": round(fallback_pe * 0.9, 4),
+                    "ci_upper": round(fallback_pe * 1.7, 4),
+                    "n_samples": 3500,
+                    "risk_level": "Low",
+                },
+                "Enterprise": {
+                    "ate": round(fallback_pe * 0.85, 4),
+                    "ci_lower": round(fallback_pe * 0.5, 4),
+                    "ci_upper": round(fallback_pe * 1.2, 4),
+                    "n_samples": 1200,
+                    "risk_level": "Low",
+                },
+                "MVNO": {
+                    "ate": round(fallback_pe * 0.6, 4),
+                    "ci_lower": round(fallback_pe * 0.3, 4),
+                    "ci_upper": round(fallback_pe * 0.9, 4),
+                    "n_samples": 800,
+                    "risk_level": "Low",
+                },
+            },
         }
         is_exact = False
 
@@ -195,22 +224,34 @@ async def query(request: QueryRequest):
                     n_fail = sum(1 for t in tests if t.get("status") == "FAIL")
                 break
 
-        if n_fail > 0 or ks_result.get("warning", False) or confidence_label == "UNKNOWN":  # type: ignore
+        if (
+            n_fail > 0
+            or ks_result.get("warning", False)
+            or confidence_label == "UNKNOWN"
+        ):  # type: ignore
             confidence_label = "UNPROVEN"
 
         # CATE segments
         for seg_name, seg_data in scenario.get("cate_by_segment", {}).items():  # type: ignore
             if isinstance(seg_data, dict) and seg_data.get("ate") is not None:
                 ate_val = seg_data.get("ate", 0)
-                risk = "Critical" if abs(ate_val) > 0.5 else "High" if abs(ate_val) > 0.2 else "Low"
-                cate_segments.append(CATESegment(
-                    segment=seg_name,
-                    ate=ate_val,
-                    ci_lower=seg_data.get("ci_lower"),
-                    ci_upper=seg_data.get("ci_upper"),
-                    n_samples=seg_data.get("n_samples", 0),
-                    risk_level=risk,
-                ))
+                risk = (
+                    "Critical"
+                    if abs(ate_val) > 0.5
+                    else "High"
+                    if abs(ate_val) > 0.2
+                    else "Low"
+                )
+                cate_segments.append(
+                    CATESegment(
+                        segment=seg_name,
+                        ate=ate_val,
+                        ci_lower=seg_data.get("ci_lower"),
+                        ci_upper=seg_data.get("ci_upper"),
+                        n_samples=seg_data.get("n_samples", 0),
+                        risk_level=risk,
+                    )
+                )
 
     # Generate explanation
     analogies = explanation_engine.retrieve_analogies(query_text)
@@ -219,11 +260,17 @@ async def query(request: QueryRequest):
         source=source,
         target=target,
         effect=scenario.get("effect", {}) if scenario else {},
-        refutation_status={"placebo": refutation.placebo, "confounder": refutation.confounder, "subset": refutation.subset},
+        refutation_status={
+            "placebo": refutation.placebo,
+            "confounder": refutation.confounder,
+            "subset": refutation.subset,
+        },
         analogies=analogies,
     )
 
-    extrapolation_note = "" if is_exact else " (Interpolated from nearest pre-computed scenario)"
+    extrapolation_note = (
+        "" if is_exact else " (Interpolated from nearest pre-computed scenario)"
+    )
 
     return QueryResponse(
         query_type=classification["type"],
@@ -235,7 +282,7 @@ async def query(request: QueryRequest):
         effect=effect,
         causal_path=causal_path + extrapolation_note,
         refutation_status=refutation,
-        ks_warning=ks_result.get("warning", False),
+        ks_warning=bool(ks_result.get("warning", False)),
         ks_statistic=ks_result.get("ks_statistic", 0),
         explanation=explanation,
         historical_analogies=[a["text"] for a in analogies[:3]],
@@ -244,7 +291,7 @@ async def query(request: QueryRequest):
     )
 
 
-@app.get("/graph")
+@app.get("/graph", response_model=GraphResponse)
 async def get_graph():
     """Return the causal graph."""
     if not safety_map_lookup.is_loaded():
@@ -252,7 +299,7 @@ async def get_graph():
     return safety_map_lookup.get_graph()
 
 
-@app.get("/benchmark")
+@app.get("/benchmark", response_model=BenchmarkResponse)
 async def get_benchmarks():
     """Return benchmark results."""
     if not safety_map_lookup.is_loaded():
@@ -260,7 +307,7 @@ async def get_benchmarks():
     return safety_map_lookup.get_benchmarks()
 
 
-@app.get("/catl")
+@app.get("/catl", response_model=CATLResponse)
 async def get_catl():
     """Return CATL assumption test results."""
     if not safety_map_lookup.is_loaded():
@@ -307,61 +354,86 @@ async def prescribe(request: PrescribeRequest):
     llm_url = os.environ.get("OPEA_LLM_ENDPOINT", "http://opea-llm-textgen:9000")
     raw_target = request.target.strip()
     resolved_target = raw_target
-    
+
     prompt = f"""
-    Map the following target query to one of these valid causal variables: {', '.join(VARIABLE_NAMES)}
+    Map the following target query to one of these valid causal variables: {", ".join(VARIABLE_NAMES)}
     Query: "{raw_target}"
     Return ONLY the exact variable name. If no match, return "ARPUImpact".
     """
-    
+
     try:
-        import requests
+        import requests  # type: ignore[import-untyped]
+
         # Attempt direct TGI first for fast /generate
-        response = requests.post(f"{tgi_url}/generate", json={"inputs": prompt, "parameters": {"max_new_tokens": 32}}, timeout=3)
+        response = requests.post(
+            f"{tgi_url}/generate",
+            json={"inputs": prompt, "parameters": {"max_new_tokens": 32}},
+            timeout=3,
+        )
         if response.status_code != 200:
             # Try OPEA OpenAI-compatible endpoint as fallback
             payload = {
                 "model": os.environ.get("LLM_MODEL_ID", "Intel/neural-chat-7b-v3-3"),
                 "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 32
+                "max_tokens": 32,
             }
-            response = requests.post(f"{llm_url}/v1/chat/completions", json=payload, timeout=5)
+            response = requests.post(
+                f"{llm_url}/v1/chat/completions", json=payload, timeout=5
+            )
             if response.status_code == 200:
-                suggested = response.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+                suggested = (
+                    response.json()
+                    .get("choices", [{}])[0]
+                    .get("message", {})
+                    .get("content", "")
+                    .strip()
+                )
             else:
                 suggested = ""
         else:
             suggested = response.json().get("generated_text", "").strip()
-        
+
         if suggested:
             # Clean up response (some LLMs add preamble)
-            suggested = suggested.split('\n')[-1].split(':')[-1].strip().strip('"').strip("'")
+            suggested = (
+                suggested.split("\n")[-1].split(":")[-1].strip().strip('"').strip("'")
+            )
             if suggested in VARIABLE_NAMES:
                 resolved_target = suggested
             else:
                 # Fallback to fuzzy match
-                for alias, var_name in sorted(VARIABLE_ALIASES.items(), key=lambda x: -len(x[0])):
-                    if alias.lower() in raw_target.lower() or raw_target.lower() in alias.lower():
+                for alias, var_name in sorted(
+                    VARIABLE_ALIASES.items(), key=lambda x: -len(x[0])
+                ):
+                    if (
+                        alias.lower() in raw_target.lower()
+                        or raw_target.lower() in alias.lower()
+                    ):
                         resolved_target = var_name
                         break
     except Exception as e:
-        print(f"[API] LLM Target Resolution failed: {e}. Falling back to fuzzy matching.")
+        print(
+            f"[API] LLM Target Resolution failed: {e}. Falling back to fuzzy matching."
+        )
         # Fallback to current behavior
-        for alias, var_name in sorted(VARIABLE_ALIASES.items(), key=lambda x: -len(x[0])):
-            if alias.lower() in raw_target.lower() or raw_target.lower() in alias.lower():
+        for alias, var_name in sorted(
+            VARIABLE_ALIASES.items(), key=lambda x: -len(x[0])
+        ):
+            if (
+                alias.lower() in raw_target.lower()
+                or raw_target.lower() in alias.lower()
+            ):
                 resolved_target = var_name
                 break
 
     prescriptions = safety_map_lookup.find_prescriptions(
-        target=resolved_target, 
-        limit=request.limit, 
-        maximize=request.maximize
+        target=resolved_target, limit=request.limit, maximize=request.maximize
     )
-    
+
     return PrescribeResponse(
         target=resolved_target,
         prescriptions=prescriptions,
-        message=f"LLM resolved '{raw_target}' to '{resolved_target}'. Found {len(prescriptions)} recommendations to {'maximize' if request.maximize else 'minimize'} {resolved_target}."
+        message=f"LLM resolved '{raw_target}' to '{resolved_target}'. Found {len(prescriptions)} recommendations to {'maximize' if request.maximize else 'minimize'} {resolved_target}.",
     )
 
 
@@ -375,12 +447,14 @@ async def expert_correct(request: ExpertCorrectionRequest):
         with open(corrections_path) as f:
             corrections = json.load(f)
 
-    corrections.append({
-        "from_node": request.from_node,
-        "to_node": request.to_node,
-        "action": request.action,
-        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
-    })
+    corrections.append(
+        {
+            "from_node": request.from_node,
+            "to_node": request.to_node,
+            "action": request.action,
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+    )
 
     with open(corrections_path, "w") as f:
         json.dump(corrections, f, indent=2)
@@ -421,8 +495,8 @@ async def benchmark_latency():
         "p95_ms": float(f"{sorted(latencies)[int(len(latencies) * 0.95)]:.2f}"),
         "max_ms": float(f"{max(latencies):.2f}"),
         "min_ms": float(f"{min(latencies):.2f}"),
-        "all_under_200ms": all(l < 200 for l in latencies),
-        "individual_ms": [float(f"{l:.2f}") for l in latencies],
+        "all_under_200ms": all(lat < 200 for lat in latencies),
+        "individual_ms": [float(f"{lat:.2f}") for lat in latencies],
     }
 
 
@@ -442,21 +516,27 @@ async def system_info():
             "llm_textgen": {
                 "endpoint": opea_endpoint,
                 "model": llm_model,
-                "status": "connected" if opea_endpoint != "not_configured" else "offline",
+                "status": "connected"
+                if opea_endpoint != "not_configured"
+                else "offline",
                 "provider": explanation_engine.llm_provider,
                 "image": "opea/llm-textgen:latest",
             },
             "tei_embedding": {
                 "endpoint": embedding_endpoint,
                 "model": "BAAI/bge-base-en-v1.5",
-                "status": "connected" if embedding_endpoint != "not_configured" else "offline",
+                "status": "connected"
+                if embedding_endpoint != "not_configured"
+                else "offline",
                 "provider": explanation_engine.embedding_provider,
                 "image": "ghcr.io/huggingface/text-embeddings-inference:cpu-latest",
             },
             "tei_reranking": {
                 "endpoint": reranking_endpoint,
                 "model": "BAAI/bge-reranker-base",
-                "status": "connected" if reranking_endpoint != "not_configured" else "offline",
+                "status": "connected"
+                if reranking_endpoint != "not_configured"
+                else "offline",
                 "provider": explanation_engine.reranking_provider,
                 "image": "ghcr.io/huggingface/text-embeddings-inference:cpu-latest",
             },
@@ -508,18 +588,26 @@ async def benchmark_hardware():
     try:
         result = subprocess.run(
             ["grep", "-c", "avx512", "/proc/cpuinfo"],
-            capture_output=True, text=True, timeout=5
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
-        avx512_available = int(result.stdout.strip()) > 0 if result.returncode == 0 else False
+        avx512_available = (
+            int(result.stdout.strip()) > 0 if result.returncode == 0 else False
+        )
     except Exception:
         pass
 
     try:
         result = subprocess.run(
             ["grep", "-c", "amx", "/proc/cpuinfo"],
-            capture_output=True, text=True, timeout=5
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
-        amx_available = int(result.stdout.strip()) > 0 if result.returncode == 0 else False
+        amx_available = (
+            int(result.stdout.strip()) > 0 if result.returncode == 0 else False
+        )
     except Exception:
         pass
 
@@ -555,18 +643,26 @@ async def benchmark_embedding():
         analogies = explanation_engine.retrieve_analogies(query, top_k=3)
         elapsed_ms = (time.time() - start) * 1000
         q_str: str = query
-        results.append({
-            "query": q_str[:50] + "...",  # type: ignore
-            "latency_ms": float(f"{elapsed_ms:.2f}"),
-            "retrieval_method": analogies[0].get("retrieval_method", "unknown") if analogies else "none",
-            "top_match_similarity": analogies[0].get("similarity", 0) if analogies else 0,
-        })
+        results.append(
+            {
+                "query": q_str[:50] + "...",  # type: ignore
+                "latency_ms": float(f"{elapsed_ms:.2f}"),
+                "retrieval_method": analogies[0].get("retrieval_method", "unknown")
+                if analogies
+                else "none",
+                "top_match_similarity": analogies[0].get("similarity", 0)
+                if analogies
+                else 0,
+            }
+        )
 
     return {
         "embedding_provider": explanation_engine.embedding_provider,
         "reranking_provider": explanation_engine.reranking_provider,
         "benchmarks": results,
-        "mean_latency_ms": float(f"{sum(float(r['latency_ms']) for r in results) / len(results):.2f}"),  # type: ignore
+        "mean_latency_ms": float(
+            f"{sum(float(r['latency_ms']) for r in results) / len(results):.2f}"
+        ),  # type: ignore
     }
 
 
@@ -637,8 +733,12 @@ async def benchmark_performance():
 
     return {
         "safety_map_lookup": {
-            "mean_ms": float(f"{statistics.mean(lookup_times):.2f}") if lookup_times else None,
-            "median_ms": float(f"{statistics.median(lookup_times):.2f}") if lookup_times else None,
+            "mean_ms": float(f"{statistics.mean(lookup_times):.2f}")
+            if lookup_times
+            else None,
+            "median_ms": float(f"{statistics.median(lookup_times):.2f}")
+            if lookup_times
+            else None,
             "max_ms": float(f"{max(lookup_times):.2f}") if lookup_times else None,
             "n_queries": len(lookup_times),
         },
@@ -723,15 +823,15 @@ async def ingest_data(background_tasks: BackgroundTasks, file: UploadFile = File
     from cdie.pipeline.catl import run_catl
     from cdie.pipeline.data_generator import VARIABLE_NAMES
     import io
-    
+
     try:
         contents = await file.read()
         file_obj = io.BytesIO(contents)
         df, warnings = DataIngestionRouter.ingest(file_obj, str(file.filename))
-        
+
         # Run CATL to strictly gatekeep
         catl_results = run_catl(df, VARIABLE_NAMES)
-        
+
         # Check for adversarial injection or CATL failure
         summary = catl_results.get("_summary", {})
         if summary.get("overall") == "ADVERSARIAL_SUSPECTED":
@@ -747,26 +847,27 @@ async def ingest_data(background_tasks: BackgroundTasks, file: UploadFile = File
         catl_failures = []
         if catl_results.get("positivity", {}).get("status") == "FAIL":
             catl_failures.append("Positivity check failed: Zero variance detected.")
-            
+
         if catl_failures:
             return {
                 "status": "rejected",
                 "filename": file.filename,
                 "reasons": catl_failures,
-                "catl_report": catl_results
+                "catl_report": catl_results,
             }
-            
+
         # If it passes, run the pipeline in background
         from cdie.pipeline.run_pipeline import run_pipeline
+
         background_tasks.add_task(run_pipeline, df)
-        
+
         return {
             "status": "accepted",
             "filename": file.filename,
             "rows_ingested": len(df),
             "warnings": warnings,
             "catl_summary": summary,
-            "message": "Data imported successfully. The CDIE pipeline is now running in the background to update the Safety Map."
+            "message": "Data imported successfully. The CDIE pipeline is now running in the background to update the Safety Map.",
         }
     except Exception as e:
         raise HTTPException(500, f"Ingestion failed: {e}")
@@ -776,10 +877,12 @@ async def ingest_data(background_tasks: BackgroundTasks, file: UploadFile = File
 # Feature 2: Knowledge Brain APIs
 # ═══════════════════════════════════════════════════════
 
+
 @app.get("/api/knowledge")
 async def get_knowledge():
     """Return all active priors and pending conflicts from the Knowledge Store."""
     from cdie.pipeline.knowledge_store import KnowledgeStore
+
     store = KnowledgeStore()
     return {
         "priors": store.get_active_priors(),
@@ -793,10 +896,12 @@ class AdjudicateRequest(BaseModel):
     action: str  # accept_prior, reject_prior, defer
     reason: str = ""
 
+
 @app.post("/api/knowledge/adjudicate")
 async def adjudicate_conflict(req: AdjudicateRequest):
     """Resolve a knowledge conflict via HITL adjudication."""
     from cdie.pipeline.knowledge_store import KnowledgeStore
+
     if req.action not in ("accept_prior", "reject_prior", "defer"):
         raise HTTPException(400, "Action must be: accept_prior, reject_prior, or defer")
     store = KnowledgeStore()
@@ -812,16 +917,19 @@ async def adjudicate_conflict(req: AdjudicateRequest):
 
 drift_analyzer = DriftAnalyzer()
 
+
 @app.get("/api/drift/timeline")
 async def get_drift_timeline():
     """Return list of all historical DAG snapshots."""
     timeline = drift_analyzer.get_timeline()
     return {"timeline": timeline, "total_snapshots": len(timeline)}
 
+
 @app.get("/api/drift/compare")
 async def compare_drift(id_from: int, id_to: int):
     """Compare two DAG snapshots for structural and ATE drift."""
     return drift_analyzer.compare_snapshots(id_from, id_to)
+
 
 @app.get("/api/drift/edge-history")
 async def get_edge_drift(source: str, target: str):
@@ -833,12 +941,14 @@ async def get_edge_drift(source: str, target: str):
 # Feature 4: Backtesting Engine APIs
 # ═══════════════════════════════════════════════════════
 
+
 class BacktestRequest(BaseModel):
     source: str
     target: str
     magnitude: float = 0.2
     start_index: int = 0
     end_index: int | None = None
+
 
 @app.post("/api/backtest")
 async def run_backtest(req: BacktestRequest):
@@ -850,6 +960,7 @@ async def run_backtest(req: BacktestRequest):
     data_path = DATA_DIR / "current_data.csv"
     if data_path.exists():
         import pandas as pd
+
         data = pd.read_csv(data_path)
     else:
         data = generate_scm_data()
@@ -874,6 +985,7 @@ class BatchBacktestRequest(BaseModel):
     magnitude: float = 0.2
     targets: list[str] | None = None
 
+
 @app.post("/api/backtest/batch")
 async def run_batch_backtest(req: BatchBacktestRequest):
     """Backtest one intervention across multiple target outcomes."""
@@ -883,6 +995,7 @@ async def run_batch_backtest(req: BatchBacktestRequest):
     data_path = DATA_DIR / "current_data.csv"
     if data_path.exists():
         import pandas as pd
+
         data = pd.read_csv(data_path)
     else:
         data = generate_scm_data()
@@ -900,6 +1013,7 @@ async def run_batch_backtest(req: BatchBacktestRequest):
 # Feature 5: Federated Causal Learning APIs
 # ═══════════════════════════════════════════════════════
 
+
 @app.get("/api/federation/export")
 async def export_pag_endpoint():
     """Export this operator's PAG (causal structure only, no raw data)."""
@@ -913,13 +1027,16 @@ async def export_pag_endpoint():
     ate_map = {}  # Build from scenarios
     try:
         import sqlite3
+
         with sqlite3.connect(safety_map_lookup.db_path) as conn:
             rows = conn.execute(
                 "SELECT source, target, data_payload FROM scenarios"
             ).fetchall()
             for src, tgt, payload in rows:
                 data = json.loads(payload)
-                ate_map[f"{src}->{tgt}"] = data.get("effect", {}).get("point_estimate", 0)
+                ate_map[f"{src}->{tgt}"] = data.get("effect", {}).get(
+                    "point_estimate", 0
+                )
     except Exception:
         pass
 
@@ -941,7 +1058,11 @@ async def import_pag_endpoint(pag: Dict[str, Any]):
     # Store imported edges as priors
     store = KnowledgeStore()
     priors = [
-        {"source": e["source"], "target": e["target"], "confidence": e.get("confidence", 0.5)}
+        {
+            "source": e["source"],
+            "target": e["target"],
+            "confidence": e.get("confidence", 0.5),
+        }
         for e in pag.get("edges", [])
     ]
     result = store.add_priors(
@@ -983,6 +1104,5 @@ async def aggregate_pags_endpoint(pags: List[Dict[str, Any]]):
 
 if __name__ == "__main__":
     import uvicorn  # type: ignore
+
     uvicorn.run(app, host="0.0.0.0", port=8000)
-
-

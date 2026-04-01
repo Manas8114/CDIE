@@ -21,10 +21,13 @@ def _run_placebo_test(data, treatment, outcome, dag, variable_names):
             graph=_dag_to_dot(dag, variable_names),
         )
         identified = model.identify_effect(proceed_when_unidentifiable=True)
-        estimate = model.estimate_effect(identified, method_name="backdoor.linear_regression")
+        estimate = model.estimate_effect(
+            identified, method_name="backdoor.linear_regression"
+        )
 
         refutation = model.refute_estimate(
-            identified, estimate,
+            identified,
+            estimate,
             method_name="placebo_treatment_refuter",
             placebo_type="permute",
             num_simulations=5,
@@ -57,10 +60,13 @@ def _run_confounder_test(data, treatment, outcome, dag, variable_names):
             graph=_dag_to_dot(dag, variable_names),
         )
         identified = model.identify_effect(proceed_when_unidentifiable=True)
-        estimate = model.estimate_effect(identified, method_name="backdoor.linear_regression")
+        estimate = model.estimate_effect(
+            identified, method_name="backdoor.linear_regression"
+        )
 
         refutation = model.refute_estimate(
-            identified, estimate,
+            identified,
+            estimate,
             method_name="random_common_cause",
             num_simulations=5,
         )
@@ -102,7 +108,9 @@ def _run_subset_test(data, treatment, outcome, dag, variable_names, n_subsets=5)
                 graph=_dag_to_dot(dag, variable_names),
             )
             identified = model.identify_effect(proceed_when_unidentifiable=True)
-            estimate = model.estimate_effect(identified, method_name="backdoor.linear_regression")
+            estimate = model.estimate_effect(
+                identified, method_name="backdoor.linear_regression"
+            )
             effects.append(float(estimate.value))
 
         mean_effect = np.mean(effects)
@@ -147,46 +155,59 @@ def _run_refutation_fallback(data, treatment, outcome):
         shuffled = rng.permutation(data[treatment].values)
         placebo_corrs.append(np.corrcoef(shuffled, data[outcome].values)[0, 1])
     avg_placebo = np.mean(np.abs(placebo_corrs))
-    results.append({
-        "test": "placebo_treatment",
-        "status": "PASS" if avg_placebo < abs(original_corr) * 0.3 else "FAIL",
-        "original_effect": round(float(original_corr), 4),
-        "placebo_effect": round(float(avg_placebo), 4),
-    })
+    results.append(
+        {
+            "test": "placebo_treatment",
+            "status": "PASS" if avg_placebo < abs(original_corr) * 0.3 else "FAIL",
+            "original_effect": round(float(original_corr), 4),
+            "placebo_effect": round(float(avg_placebo), 4),
+        }
+    )
 
     # Confounder: add random noise variable
     noise = rng.normal(0, 1, len(data))
     from sklearn.linear_model import LinearRegression
+
     X_orig = data[[treatment]].values
     X_conf = np.column_stack([X_orig, noise])
     y = data[outcome].values
     coef_orig = LinearRegression().fit(X_orig, y).coef_[0]
     coef_conf = LinearRegression().fit(X_conf, y).coef_[0]
     change = abs(coef_conf - coef_orig) / max(abs(coef_orig), 1e-10)
-    results.append({
-        "test": "random_common_cause",
-        "status": "PASS" if change < 0.15 else "WARN",
-        "original_effect": round(float(coef_orig), 4),
-        "new_effect": round(float(coef_conf), 4),
-        "change_pct": round(float(change), 4),
-    })
+    results.append(
+        {
+            "test": "random_common_cause",
+            "status": "PASS" if change < 0.15 else "WARN",
+            "original_effect": round(float(coef_orig), 4),
+            "new_effect": round(float(coef_conf), 4),
+            "change_pct": round(float(change), 4),
+        }
+    )
 
     # Subset stability
     if len(data) >= 200:
         effects = []
         for i in range(5):
             subset = data.sample(frac=0.8, random_state=i)
-            coef = LinearRegression().fit(subset[[treatment]].values, subset[outcome].values).coef_[0]
+            coef = (
+                LinearRegression()
+                .fit(subset[[treatment]].values, subset[outcome].values)
+                .coef_[0]
+            )
             effects.append(coef)
         cv = np.std(effects) / max(abs(np.mean(effects)), 1e-10)
-        results.append({
-            "test": "data_subset",
-            "status": "PASS" if cv < 0.25 else "WARN",
-            "effects": [round(e, 4) for e in effects],
-            "cv": round(float(cv), 4),
-        })
+        results.append(
+            {
+                "test": "data_subset",
+                "status": "PASS" if cv < 0.25 else "WARN",
+                "effects": [round(e, 4) for e in effects],
+                "cv": round(float(cv), 4),
+            }
+        )
     else:
-        results.append({"test": "data_subset", "status": "NOT_TESTED", "reason": "n < 200"})
+        results.append(
+            {"test": "data_subset", "status": "NOT_TESTED", "reason": "n < 200"}
+        )
 
     return results
 
@@ -234,7 +255,9 @@ def run_refutation(data: pd.DataFrame, map_dag: nx.DiGraph, variable_names: list
             validated.append((src, tgt))
             print(f"[Refutation]   → VALIDATED ({n_fail} warnings)")
 
-    print(f"[Refutation] Complete. Validated: {len(validated)}, Quarantined: {len(quarantined)}")
+    print(
+        f"[Refutation] Complete. Validated: {len(validated)}, Quarantined: {len(quarantined)}"
+    )
 
     return {
         "edge_results": edge_results,

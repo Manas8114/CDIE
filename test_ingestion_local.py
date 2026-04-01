@@ -1,7 +1,6 @@
 import sys
 from pathlib import Path
 import io
-import pandas as pd
 
 sys.path.insert(0, str(Path(r"c:\Users\msgok\OneDrive\Desktop\Project\hackathon\Rename")))
 

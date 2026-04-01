@@ -4,7 +4,7 @@ Replays historical data through the causal estimator to answer:
   "If we had done intervention X at time T, what would have happened?"
 Compares predicted counterfactual with actual observed outcome.
 """
-import numpy as np
+
 import pandas as pd
 from typing import Dict, Any, Optional, List
 
@@ -29,7 +29,7 @@ class Backtester:
     ) -> Dict[str, Any]:
         """
         Backtest a counterfactual intervention.
-        
+
         Args:
             source: Treatment variable
             target: Outcome variable
@@ -54,14 +54,17 @@ class Backtester:
         eval_data = self.data.iloc[end_index:]
 
         if len(eval_data) < 10:
-            eval_data = self.data.iloc[max(0, end_index - 50):end_index]
+            eval_data = self.data.iloc[max(0, end_index - 50) : end_index]
 
         warnings: List[str] = []
 
         # Step 1: Estimate ATE from training window
         confounders = [
-            c for c in VARIABLE_NAMES
-            if c != source and c != target and c in train_data.columns
+            c
+            for c in VARIABLE_NAMES
+            if c != source
+            and c != target
+            and c in train_data.columns
             and abs(train_data[c].corr(train_data[target])) > 0.1
         ][:5]
 
@@ -81,7 +84,9 @@ class Backtester:
         # Step 4: Accuracy scoring
         if actual_delta != 0:
             direction_match = (predicted_delta > 0) == (actual_delta > 0)
-            magnitude_ratio = min(abs(predicted_delta), abs(actual_delta)) / max(abs(predicted_delta), abs(actual_delta))
+            magnitude_ratio = min(abs(predicted_delta), abs(actual_delta)) / max(
+                abs(predicted_delta), abs(actual_delta)
+            )
             accuracy_score = magnitude_ratio * (1.0 if direction_match else 0.3)
         elif predicted_delta == 0:
             accuracy_score = 1.0
@@ -117,7 +122,12 @@ class Backtester:
             "source": source,
             "target": target,
             "magnitude": magnitude,
-            "window": {"start": start_index, "end": end_index, "n_train": len(train_data), "n_eval": len(eval_data)},
+            "window": {
+                "start": start_index,
+                "end": end_index,
+                "n_train": len(train_data),
+                "n_eval": len(eval_data),
+            },
             "ate_estimate": {
                 "ate": round(ate, 4),
                 "method": ate_result.get("method", "unknown"),
@@ -130,7 +140,11 @@ class Backtester:
                 "score": round(float(accuracy_score), 3),
                 "direction_match": direction_match,
                 "magnitude_ratio": round(float(magnitude_ratio), 3),
-                "label": "HIGH" if accuracy_score > 0.7 else "MEDIUM" if accuracy_score > 0.4 else "LOW",
+                "label": "HIGH"
+                if accuracy_score > 0.7
+                else "MEDIUM"
+                if accuracy_score > 0.4
+                else "LOW",
             },
             "warnings": warnings,
         }
@@ -140,7 +154,9 @@ class Backtester:
     ) -> List[Dict[str, Any]]:
         """Run backtest across multiple targets for one source intervention."""
         if targets is None:
-            targets = [v for v in VARIABLE_NAMES if v != source and v in self.data.columns]
+            targets = [
+                v for v in VARIABLE_NAMES if v != source and v in self.data.columns
+            ]
 
         results = []
         for target in targets:

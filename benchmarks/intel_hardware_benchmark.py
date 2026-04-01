@@ -22,11 +22,10 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-
+from typing import Any
 RESULTS_DIR = Path(__file__).parent
 RESULTS_FILE = RESULTS_DIR / "intel_benchmark_results.json"
 
-from typing import Any
 
 
 def _round(value: float, ndigits: int = 2) -> float:

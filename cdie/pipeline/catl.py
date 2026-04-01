@@ -39,7 +39,9 @@ def test_faithfulness(data: pd.DataFrame, variable_names: list[str]) -> dict:
                     partial_r = (r_ij - r_ik * r_jk) / denom
 
                     # Check if marginal independence contradicts conditional
-                    marginal_p = stats.pearsonr(numeric_data[:, i], numeric_data[:, j])[1]
+                    marginal_p = stats.pearsonr(numeric_data[:, i], numeric_data[:, j])[
+                        1
+                    ]
                     is_marginal_indep = marginal_p > 0.05
                     is_conditional_dep = abs(partial_r) > 0.1
 
@@ -65,7 +67,9 @@ def test_faithfulness(data: pd.DataFrame, variable_names: list[str]) -> dict:
     if status == "WARN":
         tooltip += "Possible path cancellation in feedback loops detected."
     else:
-        tooltip += "Conditional independencies are consistent with potential DAG structures."
+        tooltip += (
+            "Conditional independencies are consistent with potential DAG structures."
+        )
 
     return {
         "test": "Faithfulness",
@@ -107,9 +111,7 @@ def test_causal_sufficiency(data: pd.DataFrame, variable_names: list[str]) -> di
 
     has_bidirected = bidirected_candidates > 0
     status = "WARN" if has_bidirected else "PASS"
-    tooltip = (
-        f"Found {bidirected_candidates} potential hidden confounder indicators. "
-    )
+    tooltip = f"Found {bidirected_candidates} potential hidden confounder indicators. "
     if has_bidirected:
         tooltip += "Potential hidden confounders detected. GFCI handles this — interpret edge directions with caution."
     else:
@@ -148,7 +150,9 @@ def test_stationarity(data: pd.DataFrame, variable_names: list[str]) -> dict:
         try:
             ks_stat, p_value = stats.ks_2samp(first_half, second_half)
             if p_value < 0.05:
-                non_stationary_vars.append((col, round(float(ks_stat), 4), round(float(p_value), 4)))
+                non_stationary_vars.append(
+                    (col, round(float(ks_stat), 4), round(float(p_value), 4))
+                )
         except Exception:
             continue
 
@@ -179,6 +183,7 @@ def test_acyclicity() -> dict:
         "details": {},
     }
 
+
 def test_positivity(data: pd.DataFrame, variable_names: list[str]) -> dict:
     """
     Positivity Test (Support Assumption).
@@ -197,7 +202,7 @@ def test_positivity(data: pd.DataFrame, variable_names: list[str]) -> dict:
         try:
             series = pd.to_numeric(data[col], errors="coerce").dropna()
             var = series.var()
-            col_info = {
+            col_info: dict[str, float | int | str | bool | None] = {
                 "variance": round(float(var), 6) if not pd.isna(var) else 0,
                 "n_unique": int(series.nunique()),
                 "n_valid": len(series),
@@ -255,7 +260,9 @@ def test_positivity(data: pd.DataFrame, variable_names: list[str]) -> dict:
         )
     else:
         status = "PASS"
-        tooltip = "Passed positivity and support checks. Variables have sufficient variance."
+        tooltip = (
+            "Passed positivity and support checks. Variables have sufficient variance."
+        )
 
     return {
         "test": "Positivity",
@@ -306,14 +313,25 @@ def run_catl(data: pd.DataFrame, variable_names: list[str]) -> dict:
         results["_summary"] = {
             "overall": "ADVERSARIAL_SUSPECTED",
             "message": "Data poisoning patterns detected. Manual review required before pipeline execution.",
-            "adversarial_columns": results["positivity"]["details"].get("adversarial_variables", []),
+            "adversarial_columns": results["positivity"]["details"].get(
+                "adversarial_variables", []
+            ),
         }
     elif "FAIL" in all_statuses:
-        results["_summary"] = {"overall": "FAIL", "message": "One or more assumption tests failed."}
+        results["_summary"] = {
+            "overall": "FAIL",
+            "message": "One or more assumption tests failed.",
+        }
     elif "WARN" in all_statuses:
-        results["_summary"] = {"overall": "WARN", "message": "Assumptions hold with caveats."}
+        results["_summary"] = {
+            "overall": "WARN",
+            "message": "Assumptions hold with caveats.",
+        }
     else:
-        results["_summary"] = {"overall": "PASS", "message": "All causal assumptions satisfied."}
+        results["_summary"] = {
+            "overall": "PASS",
+            "message": "All causal assumptions satisfied.",
+        }
 
     print(f"[CATL] Summary: {results['_summary']['overall']}")
     print("[CATL] All assumption tests complete.")
@@ -322,6 +340,7 @@ def run_catl(data: pd.DataFrame, variable_names: list[str]) -> dict:
 
 if __name__ == "__main__":
     from cdie.pipeline.data_generator import generate_scm_data, VARIABLE_NAMES
+
     df = generate_scm_data()
     results = run_catl(df, VARIABLE_NAMES)
     for test_name, result in results.items():

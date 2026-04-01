@@ -6,7 +6,7 @@ Enforces the 12-column SCM schema with hardened validation:
   - Adversarial injection detection
   - Column alias mapping
 """
-import numpy as np
+
 import pandas as pd
 from typing import Dict, List, Tuple
 from cdie.pipeline.data_generator import VARIABLE_NAMES
@@ -76,8 +76,12 @@ def _apply_alias_mapping(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str]]:
 
 def _check_timestamp_granularity(df: pd.DataFrame) -> List[str]:
     """Detect timestamp columns and warn about mixed granularities."""
-    warnings = []
-    time_cols = [c for c in df.columns if c.lower() in ("timeindex", "time_index", "timestamp", "date", "period")]
+    warnings: list[str] = []
+    time_cols = [
+        c
+        for c in df.columns
+        if c.lower() in ("timeindex", "time_index", "timestamp", "date", "period")
+    ]
     if not time_cols:
         return warnings
 
@@ -109,9 +113,13 @@ def _check_value_ranges(df: pd.DataFrame) -> List[str]:
         below = (series < lo).sum()
         above = (series > hi).sum() if hi != float("inf") else 0
         if below > 0:
-            warnings.append(f"VALUE_RANGE: '{col}' has {below} values below minimum {lo}")
+            warnings.append(
+                f"VALUE_RANGE: '{col}' has {below} values below minimum {lo}"
+            )
         if above > 0:
-            warnings.append(f"VALUE_RANGE: '{col}' has {above} values above maximum {hi}")
+            warnings.append(
+                f"VALUE_RANGE: '{col}' has {above} values above maximum {hi}"
+            )
     return warnings
 
 
@@ -144,7 +152,7 @@ def _detect_adversarial_injection(df: pd.DataFrame, variable_names: list) -> Lis
             if outliers > len(series) * 0.05:
                 warnings.append(
                     f"ADVERSARIAL_SUSPECTED: '{col}' has {outliers} extreme outliers (>6 sigma, "
-                    f"{outliers/len(series)*100:.1f}% of data). Possible injection attack."
+                    f"{outliers / len(series) * 100:.1f}% of data). Possible injection attack."
                 )
 
     # Duplicate row detection (>20% duplicates is suspicious)
@@ -178,7 +186,9 @@ def validate_schema(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str]]:
             df[col] = float("nan")
 
     # 3. Extra columns (keep TimeIndex and CustomerSegment)
-    allowed_cols = set(VARIABLE_NAMES + ["CustomerSegment", "TimeIndex", "timestamp", "date", "period"])
+    allowed_cols = set(
+        VARIABLE_NAMES + ["CustomerSegment", "TimeIndex", "timestamp", "date", "period"]
+    )
     extra_cols = [col for col in df.columns if col not in allowed_cols]
     if extra_cols:
         warnings.append(f"Dropping extra columns: {extra_cols}")
