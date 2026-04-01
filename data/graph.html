@@ -1,10 +1,6 @@
 <html>
     <head>
         <meta charset="utf-8">
-        <title>Network Graph</title>
-        <meta name="description" content="Network Knowledge Graph Visualization">
-        <meta property="og:title" content="Network Graph">
-        <meta property="og:description" content="Network Knowledge Graph">
         
             <script src="lib/bindings/utils.js"></script>
             <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/dist/vis-network.min.css" integrity="sha512-WgxfT5LWjfszlPHXRmBWHkV2eceiWTOBvrKCNbdgDYTHrT2AeLCGbF4sZlZw3UMN3WtL0tGUoIAKsu8mllg/XA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
@@ -29,6 +25,10 @@
           crossorigin="anonymous"
         ></script>
 
+
+        <center>
+          <h1></h1>
+        </center>
         <style type="text/css">
 
              #mynetwork {
@@ -50,7 +50,7 @@
 
 
     <body>
-        <div class="card" aria-label="Network Graph Container" style="width: 100%">
+        <div class="card" style="width: 100%">
             
             
             <div id="mynetwork" class="card-body"></div>
@@ -88,8 +88,8 @@
                   
 
                   // parsing and collecting nodes and edges from the python
-                  nodes = new vis.DataSet([{"borderWidth": 2, "color": "#1e293b", "font": {"color": "#f8fafc"}, "id": "CallDataRecordVolume", "label": "CallDataRecordVolume", "shape": "dot", "size": 10}, {"borderWidth": 2, "color": "#1e293b", "font": {"color": "#f8fafc"}, "id": "ARPUImpact", "label": "ARPUImpact", "shape": "dot", "size": 10}, {"borderWidth": 2, "color": "#1e293b", "font": {"color": "#f8fafc"}, "id": "NetworkLoad", "label": "NetworkLoad", "shape": "dot", "size": 10}, {"borderWidth": 2, "color": "#3b82f6", "font": {"color": "#f8fafc"}, "id": "SIMBoxFraudAttempts", "label": "SIMBoxFraudAttempts", "shape": "dot", "size": 10}, {"borderWidth": 2, "color": "#1e293b", "font": {"color": "#f8fafc"}, "id": "SIMFraudDetectionRate", "label": "SIMFraudDetectionRate", "shape": "dot", "size": 10}, {"borderWidth": 2, "color": "#ef4444", "font": {"color": "#f8fafc"}, "id": "RevenueLeakageVolume", "label": "RevenueLeakageVolume", "shape": "dot", "size": 10}, {"borderWidth": 2, "color": "#1e293b", "font": {"color": "#f8fafc"}, "id": "SubscriberRetentionScore", "label": "SubscriberRetentionScore", "shape": "dot", "size": 10}, {"borderWidth": 2, "color": "#1e293b", "font": {"color": "#f8fafc"}, "id": "CashFlowRisk", "label": "CashFlowRisk", "shape": "dot", "size": 10}, {"borderWidth": 2, "color": "#1e293b", "font": {"color": "#f8fafc"}, "id": "NetworkOpExCost", "label": "NetworkOpExCost", "shape": "dot", "size": 10}, {"borderWidth": 2, "color": "#1e293b", "font": {"color": "#f8fafc"}, "id": "FraudPolicyStrictness", "label": "FraudPolicyStrictness", "shape": "dot", "size": 10}, {"borderWidth": 2, "color": "#1e293b", "font": {"color": "#f8fafc"}, "id": "RegulatorySignal", "label": "RegulatorySignal", "shape": "dot", "size": 10}, {"borderWidth": 2, "color": "#1e293b", "font": {"color": "#f8fafc"}, "id": "ITURegulatoryPressure", "label": "ITURegulatoryPressure", "shape": "dot", "size": 10}]);
-                  edges = new vis.DataSet([{"arrows": "to", "color": "#10b981", "from": "CallDataRecordVolume", "to": "ARPUImpact", "width": 1}, {"arrows": "to", "color": "#10b981", "from": "CallDataRecordVolume", "to": "NetworkLoad", "width": 1}, {"arrows": "to", "color": "#10b981", "from": "SIMBoxFraudAttempts", "to": "CallDataRecordVolume", "width": 1}, {"arrows": "to", "color": "#10b981", "from": "SIMBoxFraudAttempts", "to": "SIMFraudDetectionRate", "width": 1}, {"arrows": "to", "color": "#3b82f6", "from": "SIMBoxFraudAttempts", "to": "RevenueLeakageVolume", "width": 1}, {"arrows": "to", "color": "#10b981", "from": "SIMFraudDetectionRate", "to": "RevenueLeakageVolume", "width": 1}, {"arrows": "to", "color": "#10b981", "from": "SIMFraudDetectionRate", "to": "SubscriberRetentionScore", "width": 1}, {"arrows": "to", "color": "#10b981", "from": "RevenueLeakageVolume", "to": "ARPUImpact", "width": 1}, {"arrows": "to", "color": "#10b981", "from": "RevenueLeakageVolume", "to": "CashFlowRisk", "width": 1}, {"arrows": "to", "color": "#10b981", "from": "SubscriberRetentionScore", "to": "ARPUImpact", "width": 1}, {"arrows": "to", "color": "#10b981", "from": "NetworkOpExCost", "to": "CashFlowRisk", "width": 1}, {"arrows": "to", "color": "#10b981", "from": "NetworkLoad", "to": "NetworkOpExCost", "width": 1}]);
+                  nodes = new vis.DataSet([{"borderWidth": 2, "color": "#1e293b", "font": {"color": "#f8fafc"}, "id": "CallDataRecordVolume", "label": "CallDataRecordVolume", "shape": "dot", "size": 10}, {"borderWidth": 2, "color": "#1e293b", "font": {"color": "#f8fafc"}, "id": "ARPUImpact", "label": "ARPUImpact", "shape": "dot", "size": 10}, {"borderWidth": 2, "color": "#1e293b", "font": {"color": "#f8fafc"}, "id": "NetworkLoad", "label": "NetworkLoad", "shape": "dot", "size": 10}, {"borderWidth": 2, "color": "#1e293b", "font": {"color": "#f8fafc"}, "id": "SIMBoxFraudAttempts", "label": "SIMBoxFraudAttempts", "shape": "dot", "size": 10}, {"borderWidth": 2, "color": "#ef4444", "font": {"color": "#f8fafc"}, "id": "SIMFraudDetectionRate", "label": "SIMFraudDetectionRate", "shape": "dot", "size": 10}, {"borderWidth": 2, "color": "#1e293b", "font": {"color": "#f8fafc"}, "id": "RevenueLeakageVolume", "label": "RevenueLeakageVolume", "shape": "dot", "size": 10}, {"borderWidth": 2, "color": "#1e293b", "font": {"color": "#f8fafc"}, "id": "SubscriberRetentionScore", "label": "SubscriberRetentionScore", "shape": "dot", "size": 10}, {"borderWidth": 2, "color": "#1e293b", "font": {"color": "#f8fafc"}, "id": "CashFlowRisk", "label": "CashFlowRisk", "shape": "dot", "size": 10}, {"borderWidth": 2, "color": "#1e293b", "font": {"color": "#f8fafc"}, "id": "NetworkOpExCost", "label": "NetworkOpExCost", "shape": "dot", "size": 10}, {"borderWidth": 2, "color": "#3b82f6", "font": {"color": "#f8fafc"}, "id": "FraudPolicyStrictness", "label": "FraudPolicyStrictness", "shape": "dot", "size": 10}, {"borderWidth": 2, "color": "#1e293b", "font": {"color": "#f8fafc"}, "id": "RegulatorySignal", "label": "RegulatorySignal", "shape": "dot", "size": 10}, {"borderWidth": 2, "color": "#1e293b", "font": {"color": "#f8fafc"}, "id": "ITURegulatoryPressure", "label": "ITURegulatoryPressure", "shape": "dot", "size": 10}]);
+                  edges = new vis.DataSet([{"arrows": "to", "color": "#10b981", "from": "CallDataRecordVolume", "to": "ARPUImpact", "width": 1}, {"arrows": "to", "color": "#10b981", "from": "CallDataRecordVolume", "to": "NetworkLoad", "width": 1}, {"arrows": "to", "color": "#10b981", "from": "SIMBoxFraudAttempts", "to": "CallDataRecordVolume", "width": 1}, {"arrows": "to", "color": "#10b981", "from": "SIMBoxFraudAttempts", "to": "SIMFraudDetectionRate", "width": 1}, {"arrows": "to", "color": "#10b981", "from": "SIMBoxFraudAttempts", "to": "RevenueLeakageVolume", "width": 1}, {"arrows": "to", "color": "#10b981", "from": "SIMFraudDetectionRate", "to": "RevenueLeakageVolume", "width": 1}, {"arrows": "to", "color": "#10b981", "from": "SIMFraudDetectionRate", "to": "SubscriberRetentionScore", "width": 1}, {"arrows": "to", "color": "#10b981", "from": "RevenueLeakageVolume", "to": "ARPUImpact", "width": 1}, {"arrows": "to", "color": "#10b981", "from": "RevenueLeakageVolume", "to": "CashFlowRisk", "width": 1}, {"arrows": "to", "color": "#10b981", "from": "SubscriberRetentionScore", "to": "ARPUImpact", "width": 1}, {"arrows": "to", "color": "#10b981", "from": "NetworkOpExCost", "to": "CashFlowRisk", "width": 1}, {"arrows": "to", "color": "#10b981", "from": "NetworkLoad", "to": "NetworkOpExCost", "width": 1}]);
 
                   nodeColors = {};
                   allNodes = nodes.get({ returnType: "Object" });
