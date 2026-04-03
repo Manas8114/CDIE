@@ -8,12 +8,15 @@ import json
 import hashlib
 import time
 import sqlite3
+import os
+import shutil
 from typing import Optional
 from pathlib import Path
 import numpy as np
 import pandas as pd
 
 from cdie.pipeline.data_generator import VARIABLE_NAMES, DATA_DIR
+from cdie.runtime import get_runtime_paths
 
 
 def _sanitize_keys(obj):
@@ -228,7 +231,7 @@ def _generate_xgboost_comparison(data: pd.DataFrame):
         import shap
 
         numeric_cols = [c for c in VARIABLE_NAMES if c in data.columns]
-        target = "RevenueImpact"
+        target = "ARPUImpact"
         features = [c for c in numeric_cols if c != target]
 
         X = data[features].values
@@ -256,66 +259,55 @@ def _generate_xgboost_comparison(data: pd.DataFrame):
     except Exception as e:
         # Provide realistic fallback values
         return {
-            "target": "RevenueImpact",
+            "target": "ARPUImpact",
             "feature_importance": {
-                "TransactionVolume": 0.35,
-                "ChargebackVolume": 0.25,
-                "CustomerTrustScore": 0.15,
-                "FraudAttempts": 0.08,
-                "DetectionPolicyStrictness": 0.06,
-                "OperationalCost": 0.04,
-                "FraudDetectionRate": 0.03,
-                "LiquidityRisk": 0.02,
-                "SystemLoad": 0.01,
-                "ExternalNewsSignal": 0.005,
-                "RegulatoryPressure": 0.005,
+                "RevenueLeakageVolume": 0.35,
+                "SubscriberRetentionScore": 0.22,
+                "SIMBoxFraudAttempts": 0.12,
+                "FraudPolicyStrictness": 0.09,
+                "SIMFraudDetectionRate": 0.08,
+                "NetworkLoad": 0.05,
+                "NetworkOpExCost": 0.04,
+                "CashFlowRisk": 0.03,
+                "RegulatorySignal": 0.01,
+                "ITURegulatoryPressure": 0.01,
             },
             "model_r2": 0.87,
             "status": f"SIMULATED ({str(e)[:30]})",
         }
 
 
-def save_safety_map(safety_map: dict, output_dir: Optional[Path] = None):
-    """Save Safety Map with SHA-256 integrity hash into an SQLite database."""
-    out = output_dir or DATA_DIR
-    out.mkdir(parents=True, exist_ok=True)
-
-    db_path = out / "safety_map.db"
-
-    # Compute hash before saving
-    safety_map = _sanitize_keys(safety_map)
-    content = json.dumps(safety_map, sort_keys=True, default=str)
-    sha256_hash = hashlib.sha256(content.encode()).hexdigest()
-    safety_map["sha256_hash"] = sha256_hash
-
-    with sqlite3.connect(db_path) as conn:
+def _write_sqlite_safety_map(sqlite_path: Path, safety_map: dict) -> None:
+    """Write the Safety Map into a SQLite database at the provided path."""
+    sqlite_path.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(sqlite_path) as conn:
         cursor = conn.cursor()
 
-        # Scenarios table indexed by source and target
-        cursor.execute("""CREATE TABLE IF NOT EXISTS scenarios (
-            id TEXT PRIMARY KEY,
-            source TEXT,
-            target TEXT,
-            magnitude_key TEXT,
-            magnitude_value REAL,
-            effect_point REAL,
-            effect_lower REAL,
-            effect_upper REAL,
-            refutation_status TEXT,
-            data_payload TEXT
-        )""")
+        cursor.execute(
+            """CREATE TABLE IF NOT EXISTS scenarios (
+                id TEXT PRIMARY KEY,
+                source TEXT,
+                target TEXT,
+                magnitude_key TEXT,
+                magnitude_value REAL,
+                effect_point REAL,
+                effect_lower REAL,
+                effect_upper REAL,
+                refutation_status TEXT,
+                data_payload TEXT
+            )"""
+        )
 
-        # Key-Value store table for metadata/graphs
-        cursor.execute("""CREATE TABLE IF NOT EXISTS store (
-            key TEXT PRIMARY KEY,
-            value TEXT
-        )""")
+        cursor.execute(
+            """CREATE TABLE IF NOT EXISTS store (
+                key TEXT PRIMARY KEY,
+                value TEXT
+            )"""
+        )
 
-        # Clear existing
         cursor.execute("DELETE FROM scenarios")
         cursor.execute("DELETE FROM store")
 
-        # Insert scenarios using bulk execute
         scenarios = safety_map.get("scenarios", {})
         scenario_rows = []
         for sid, sc in scenarios.items():
@@ -338,20 +330,18 @@ def save_safety_map(safety_map: dict, output_dir: Optional[Path] = None):
         cursor.executemany(
             """
             INSERT INTO scenarios (
-                id, source, target, magnitude_key, magnitude_value, 
-                effect_point, effect_lower, effect_upper, 
+                id, source, target, magnitude_key, magnitude_value,
+                effect_point, effect_lower, effect_upper,
                 refutation_status, data_payload
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
+            """,
             scenario_rows,
         )
 
-        # Create an index for faster lookups
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_source_target ON scenarios(source, target)"
         )
 
-        # Insert other keys into store
         store_rows = []
         for key, value in safety_map.items():
             if key == "scenarios":
@@ -359,33 +349,111 @@ def save_safety_map(safety_map: dict, output_dir: Optional[Path] = None):
             store_rows.append((key, json.dumps(value)))
 
         cursor.executemany("INSERT INTO store (key, value) VALUES (?, ?)", store_rows)
-
         conn.commit()
 
-    file_size = db_path.stat().st_size
-    print(
-        f"[SafetyMap] Saved SQLite DB to {db_path} ({file_size / 1024:.1f} KB, hash={sha256_hash[:16]}...)"
-    )
 
-    # === Drift Dashboard: Auto-snapshot DAG for versioned history ===
+def save_safety_map(safety_map: dict, output_dir: Optional[Path] = None):
+    """Save Safety Map with SHA-256 integrity hash into JSON and SQLite stores."""
+    out = output_dir or DATA_DIR
+    out.mkdir(parents=True, exist_ok=True)
+    runtime_paths = get_runtime_paths(out, create=True)
+
+    db_path = out / "safety_map.db"
+    json_path = out / "safety_map.json"
+    backup_path = out / "safety_map.db.bak"
+    runtime_db_path = runtime_paths["runtime_db"]
+    runtime_temp_db_path = runtime_paths["runtime_temp_db"]
+    runtime_backup_path = runtime_paths["runtime_db_backup"]
+    journal_path = Path(f"{db_path}-journal")
+
+    # Compute hash before saving
+    safety_map = _sanitize_keys(safety_map)
+    content = json.dumps(safety_map, sort_keys=True, default=str)
+    sha256_hash = hashlib.sha256(content.encode()).hexdigest()
+    safety_map["sha256_hash"] = sha256_hash
+    json_content = json.dumps(safety_map, indent=2, default=str)
+
+    with open(json_path, "w", encoding="utf-8") as f:
+        f.write(json_content)
+
+    for stale_path in (runtime_temp_db_path,):
+        if stale_path.exists():
+            try:
+                stale_path.unlink()
+            except Exception as e:
+                print(f"[SafetyMap] Temp cleanup skipped for {stale_path.name}: {e}")
+                return json_path, sha256_hash
+
+    storage_target = json_path
+    sqlite_status = "json-only"
+    sqlite_error = ""
+
+    try:
+        _write_sqlite_safety_map(runtime_temp_db_path, safety_map)
+        os.replace(runtime_temp_db_path, runtime_db_path)
+        storage_target = runtime_db_path
+        sqlite_status = "runtime-sqlite"
+
+        try:
+            shutil.copy2(runtime_db_path, runtime_backup_path)
+        except Exception as e:
+            print(f"[SafetyMap] Runtime SQLite backup refresh skipped: {e}")
+
+        try:
+            if journal_path.exists():
+                journal_path.unlink()
+            shutil.copy2(runtime_db_path, db_path)
+            storage_target = db_path
+            sqlite_status = "mirrored-sqlite"
+            try:
+                shutil.copy2(db_path, backup_path)
+            except Exception as e:
+                print(f"[SafetyMap] Project SQLite backup refresh skipped: {e}")
+        except Exception as e:
+            sqlite_error = str(e)
+            print(f"[SafetyMap] Project SQLite mirror skipped: {e}")
+
+        file_size = runtime_db_path.stat().st_size
+        print(
+            f"[SafetyMap] Saved runtime SQLite DB to {runtime_db_path} ({file_size / 1024:.1f} KB, hash={sha256_hash[:16]}...)"
+        )
+    except Exception as e:
+        sqlite_error = str(e)
+        print(f"[SafetyMap] SQLite save skipped: {e}")
+
+    # Drift history should remain available even when SQLite mirroring fails.
     try:
         from cdie.api.drift import DriftAnalyzer
 
         graph = safety_map.get("graph", {})
         edges = [(e["from"], e["to"]) for e in graph.get("edges", [])]
         ate_map = {}
-        for sid, sc in safety_map.get("scenarios", {}).items():
+        for sc in safety_map.get("scenarios", {}).values():
             src, tgt = sc.get("source", ""), sc.get("target", "")
             ate = sc.get("effect", {}).get("point_estimate", 0)
             ate_map[f"{src}->{tgt}"] = ate
 
-        analyzer = DriftAnalyzer(db_path=db_path)
-        analyzer.save_snapshot(edges, ate_map, metadata={"sha256": sha256_hash})
+        snapshot_status = "validated" if sqlite_status != "json-only" else "json-fallback"
+        analyzer = DriftAnalyzer(
+            db_path=runtime_db_path,
+            history_dir=runtime_paths["drift_dir"],
+        )
+        analyzer.save_snapshot(
+            edges,
+            ate_map,
+            metadata={
+                "sha256": sha256_hash,
+                "snapshot_status": snapshot_status,
+                "storage_backend": "json+sqlite" if sqlite_status != "json-only" else "json",
+                "canonical_json": str(json_path),
+                "sqlite_error": sqlite_error,
+            },
+        )
         print(f"[SafetyMap] DAG snapshot saved for drift tracking ({len(edges)} edges)")
     except Exception as e:
         print(f"[SafetyMap] Drift snapshot skipped: {e}")
 
-    return db_path, sha256_hash
+    return storage_target, sha256_hash
 
 
 if __name__ == "__main__":

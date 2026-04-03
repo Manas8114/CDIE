@@ -3,8 +3,9 @@ CDIE v4 — Pydantic Request/Response Models
 API contracts per SRS §3.4.
 """
 
-from pydantic import BaseModel, Field
-from typing import Optional, Any
+from typing import Any, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class QueryRequest(BaseModel):
@@ -50,9 +51,15 @@ class QueryResponse(BaseModel):
     ks_warning: bool = False
     ks_statistic: float = 0.0
     explanation: str = ""
-    historical_analogies: list[str] = []
-    cate_segments: list[CATESegment] = []
+    historical_analogies: list[str] = Field(default_factory=list)
+    cate_segments: list[CATESegment] = Field(default_factory=list)
     confidence_label: str = "ESTIMATED"
+    match_type: str = "unknown"
+    evidence_tier: str = "unknown"
+    trust_message: str = ""
+    used_fallback: bool = False
+    suggested_queries: list[str] = Field(default_factory=list)
+    available_variables: list[str] = Field(default_factory=list)
 
 
 class HealthResponse(BaseModel):
@@ -62,6 +69,7 @@ class HealthResponse(BaseModel):
     ks_status: str = "OK"
     memory_mb: float = 0.0
     n_scenarios: int = 0
+    storage_backend: str = "unloaded"
 
 
 class GraphNode(BaseModel):
@@ -77,8 +85,7 @@ class GraphEdge(BaseModel):
     weight: float = 0.0
     refutation_status: str = "UNKNOWN"
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class GraphResponse(BaseModel):
@@ -104,7 +111,7 @@ class CATLBadge(BaseModel):
     test: str
     status: str
     tooltip: str
-    details: dict = {}
+    details: dict = Field(default_factory=dict)
 
 
 class CATLResponse(BaseModel):
@@ -135,3 +142,15 @@ class PrescribeResponse(BaseModel):
     target: str
     prescriptions: list[dict[str, Any]]
     message: str
+
+
+class VariableInfo(BaseModel):
+    name: str
+    label: str
+    description: str
+    aliases: list[str] = Field(default_factory=list)
+    examples: list[str] = Field(default_factory=list)
+
+
+class VariableCatalogResponse(BaseModel):
+    variables: list[VariableInfo] = Field(default_factory=list)

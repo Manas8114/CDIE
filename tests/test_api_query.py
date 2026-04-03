@@ -26,3 +26,16 @@ def test_query_endpoint_valid():
     # It might return a 503 if the map isn't loaded offline in testing, 
     # but we just want to ensure it doesn't give a 500 internal server error due to code bugs.
     assert response.status_code in [200, 503]
+    if response.status_code == 200:
+        payload = response.json()
+        assert "match_type" in payload
+        assert "evidence_tier" in payload
+        assert "trust_message" in payload
+
+
+def test_variables_endpoint():
+    response = client.get("/variables")
+    assert response.status_code == 200
+    payload = response.json()
+    assert "variables" in payload
+    assert isinstance(payload["variables"], list)

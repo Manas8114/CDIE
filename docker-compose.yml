@@ -34,7 +34,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 60s
+      start_period: 300s
     networks:
       - cdie-network
     restart: unless-stopped
@@ -135,7 +135,9 @@ services:
     container_name: rename-pipeline
     volumes:
       - ./data:/app/data
+      - runtime-data:/app/runtime
     environment:
+      - CDIE_RUNTIME_DIR=/app/runtime
       # Intel AMX/AVX-512 Hardware Optimization
       - DNNL_MAX_CPU_ISA=AVX512_CORE_AMX
       - KMP_AFFINITY=granularity=fine,compact,1,0
@@ -164,7 +166,9 @@ services:
     volumes:
       - ./data:/app/data
       - ./cdie:/app/cdie
+      - runtime-data:/app/runtime
     environment:
+      - CDIE_RUNTIME_DIR=/app/runtime
       - OPEA_LLM_ENDPOINT=http://opea-llm-textgen:9000
       - OPEA_EMBEDDING_ENDPOINT=http://tei-embedding:80
       - OPEA_RERANKING_ENDPOINT=http://tei-reranking:80
@@ -185,6 +189,7 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+      start_period: 60s
     networks:
       - cdie-network
     restart: unless-stopped
@@ -221,13 +226,13 @@ services:
   # ═══════════════════════════════════════════════════════════════
   nextjs-ui:
     build:
-      context: .
-      dockerfile: Dockerfile.nextjs
+      context: ./frontend
+      dockerfile: ../Dockerfile.nextjs
     container_name: rename-nextjs-ui
     ports:
       - "3000:3000"
     environment:
-      - API_URL=http://api:8000
+      - NEXT_PUBLIC_API_URL=http://api:8000
       - NODE_ENV=production
     deploy:
       resources:
@@ -245,6 +250,7 @@ volumes:
   tgi-data:
   tei-embedding-data:
   tei-reranking-data:
+  runtime-data:
 
 networks:
   cdie-network:

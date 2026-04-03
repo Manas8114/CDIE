@@ -17,49 +17,126 @@ class SafetyMapLookup:
 
     def __init__(self, safety_map_path: str = None):  # type: ignore
         self.db_path: str | None = None
+        self.loaded = False
         self.sha256_hash = ""
+        self.json_store: dict[str, Any] | None = None
         self.query_history: dict[str, deque] = defaultdict(lambda: deque(maxlen=100))
         self.max_history = 100
 
         if safety_map_path:
             self.load(safety_map_path)
 
-    def load(self, path: str):
-        """Load Safety Map DB and verify integrity."""
-        base_path = Path(path)
-        if base_path.suffix == ".json":
-            self.db_path = str(base_path.with_suffix(".db"))
+    def _candidate_paths(self, path: Path) -> list[Path]:
+        candidates: list[Path] = []
+        if path.suffix == ".json":
+            db_candidate = path.with_suffix(".db")
+            candidates.extend([db_candidate, path, db_candidate.with_suffix(".db.bak")])
         else:
-            self.db_path = str(base_path)
+            candidates.append(path)
+            candidates.append(path.with_suffix(".json"))
+            candidates.append(path.with_suffix(".db.bak"))
+        deduped: list[Path] = []
+        for candidate in candidates:
+            if candidate not in deduped:
+                deduped.append(candidate)
+        return deduped
 
-        if not Path(self.db_path).exists():  # type: ignore
-            print(f"[Lookup] Safety Map DB not found at {self.db_path}")
-            return False
-
+    def _connect_sqlite(self, candidate: Path) -> bool:
         try:
-            with sqlite3.connect(self.db_path) as conn:  # type: ignore
+            with sqlite3.connect(str(candidate)) as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT value FROM store WHERE key='sha256_hash'")
                 row = cursor.fetchone()
-                if row:
-                    self.sha256_hash = json.loads(row[0])
+                self.sha256_hash = json.loads(row[0]) if row else ""
 
                 cursor.execute("SELECT COUNT(*) FROM scenarios")
                 n_scen = cursor.fetchone()[0]
 
+            self.db_path = str(candidate)
+            self.loaded = True
             print(f"[Lookup] Connected to SQLite Safety Map: {n_scen} scenarios")
             return True
         except Exception as e:
-            print(f"[Lookup] Error connecting to DB: {e}")
+            print(f"[Lookup] Error connecting to DB at {candidate}: {e}")
             return False
 
+    def _materialize_json_db(self, json_path: Path) -> Optional[Path]:
+        if not json_path.exists():
+            return None
+
+        try:
+            from cdie.pipeline.safety_map import save_safety_map
+
+            with open(json_path, "r", encoding="utf-8") as f:
+                safety_map = json.load(f)
+
+            db_path, _ = save_safety_map(safety_map, json_path.parent)
+            return db_path
+        except Exception as e:
+            print(f"[Lookup] Error converting JSON Safety Map from {json_path}: {e}")
+            return None
+
+    def _load_json(self, json_path: Path) -> bool:
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                self.json_store = json.load(f)
+
+            self.db_path = str(json_path)
+            self.loaded = True
+            self.sha256_hash = str(self.json_store.get("sha256_hash", ""))
+            n_scen = len(self.json_store.get("scenarios", {}))
+            print(f"[Lookup] Loaded JSON Safety Map: {n_scen} scenarios")
+            return True
+        except Exception as e:
+            print(f"[Lookup] Error loading JSON Safety Map at {json_path}: {e}")
+            return False
+
+    def load(self, path: str):
+        """Load Safety Map DB and verify integrity."""
+        base_path = Path(path)
+        self.db_path = None
+        self.loaded = False
+        self.sha256_hash = ""
+        self.json_store = None
+
+        for candidate in self._candidate_paths(base_path):
+            if not candidate.exists():
+                continue
+
+            if candidate.suffix == ".json":
+                if self._load_json(candidate):
+                    return True
+                candidate = self._materialize_json_db(candidate) or candidate
+                if candidate.suffix == ".json" or not candidate.exists():
+                    continue
+
+            if self._connect_sqlite(candidate):
+                return True
+
+        print(f"[Lookup] Safety Map DB not found or unreadable for base path {base_path}")
+        return False
+
     def is_loaded(self) -> bool:
-        return self.db_path is not None and Path(self.db_path).exists()  # type: ignore
+        if self.json_store is not None:
+            return bool(self.loaded)
+        return bool(self.loaded and self.db_path and Path(self.db_path).exists())
+
+    def get_storage_backend(self) -> str:
+        if self.json_store is not None:
+            return "json"
+        if self.is_loaded():
+            return "sqlite"
+        return "unloaded"
+
+    def get_loaded_path(self) -> str:
+        return self.db_path or ""
 
     def _get_store_val(self, key: str, default):
         """Helper to get a value from the key-value store table."""
         if not self.is_loaded():
             return default
+        if self.json_store is not None:
+            return self.json_store.get(key, default)
         try:
             with sqlite3.connect(self.db_path) as conn:  # type: ignore
                 cursor = conn.cursor()
@@ -77,6 +154,19 @@ class SafetyMapLookup:
         """Find a matching scenario directly from SQL index."""
         if not self.is_loaded():
             return None
+        if self.json_store is not None:
+            scenarios = self.json_store.get("scenarios", {})
+            if magnitude_key:
+                return scenarios.get(f"{source}__{target}__{magnitude_key}")
+
+            candidates = [
+                scenario
+                for scenario in scenarios.values()
+                if scenario.get("source") == source and scenario.get("target") == target
+            ]
+            if not candidates:
+                return None
+            return min(candidates, key=lambda s: abs(float(s.get("magnitude_value", 0))))
 
         try:
             with sqlite3.connect(self.db_path) as conn:  # type: ignore
@@ -117,6 +207,27 @@ class SafetyMapLookup:
 
         exact_key = mag_key_map.get(int(magnitude_pct))
 
+        if self.json_store is not None:
+            scenarios = self.json_store.get("scenarios", {})
+            if exact_key:
+                exact = scenarios.get(f"{source}__{target}__{exact_key}")
+                if exact:
+                    return exact, True
+
+            best_scenario = None
+            best_dist = float("inf")
+            for scenario in scenarios.values():
+                if scenario.get("source") != source or scenario.get("target") != target:
+                    continue
+                dist = abs(float(scenario.get("magnitude_value", 0)) * 100 - magnitude_pct)
+                if dist < best_dist:
+                    best_dist = dist
+                    best_scenario = scenario
+                    if dist == 0:
+                        return best_scenario, True
+
+            return best_scenario, False
+
         try:
             with sqlite3.connect(self.db_path) as conn:  # type: ignore
                 cursor = conn.cursor()
@@ -156,6 +267,18 @@ class SafetyMapLookup:
         """Find the top interventions to maximize or minimize a target."""
         if not self.is_loaded():
             return []
+        if self.json_store is not None:
+            prescriptions = [
+                scenario
+                for scenario in self.json_store.get("scenarios", {}).values()
+                if scenario.get("target") == target
+                and scenario.get("refutation_status") == "VALIDATED"
+            ]
+            prescriptions.sort(
+                key=lambda x: x.get("effect", {}).get("point_estimate", 0),
+                reverse=maximize,
+            )
+            return list(prescriptions[:limit])
 
         try:
             with sqlite3.connect(self.db_path) as conn:  # type: ignore
@@ -174,7 +297,7 @@ class SafetyMapLookup:
 
                 for row in rows:
                     scenario = json.loads(row[0])
-                    if scenario.get("refutation_status") != "UNPROVEN":
+                    if scenario.get("refutation_status") == "VALIDATED":
                         prescriptions.append(scenario)
 
                 prescriptions.sort(
@@ -235,13 +358,16 @@ class SafetyMapLookup:
     def get_metadata(self) -> dict:
         n_scen = 0
         if self.is_loaded():
-            try:
-                with sqlite3.connect(self.db_path) as conn:  # type: ignore
-                    cursor = conn.cursor()
-                    cursor.execute("SELECT COUNT(*) FROM scenarios")
-                    n_scen = cursor.fetchone()[0]
-            except Exception:
-                pass
+            if self.json_store is not None:
+                n_scen = len(self.json_store.get("scenarios", {}))
+            else:
+                try:
+                    with sqlite3.connect(self.db_path) as conn:  # type: ignore
+                        cursor = conn.cursor()
+                        cursor.execute("SELECT COUNT(*) FROM scenarios")
+                        n_scen = cursor.fetchone()[0]
+                except Exception:
+                    pass
 
         return {
             "version": self._get_store_val("version", "4.0.0"),
@@ -250,4 +376,6 @@ class SafetyMapLookup:
             "sha256_hash": self.sha256_hash,
             "n_scenarios": n_scen,
             "refutation_summary": self._get_store_val("refutation_summary", {}),
+            "storage_backend": self.get_storage_backend(),
+            "loaded_path": self.get_loaded_path(),
         }

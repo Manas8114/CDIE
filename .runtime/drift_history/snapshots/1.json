@@ -1,0 +1,121 @@
+{
+  "id": 1,
+  "timestamp": "2026-04-03T01:13:11Z",
+  "edges": [
+    {
+      "source": "CallDataRecordVolume",
+      "target": "ARPUImpact"
+    },
+    {
+      "source": "CallDataRecordVolume",
+      "target": "NetworkLoad"
+    },
+    {
+      "source": "SIMBoxFraudAttempts",
+      "target": "CallDataRecordVolume"
+    },
+    {
+      "source": "SIMBoxFraudAttempts",
+      "target": "SIMFraudDetectionRate"
+    },
+    {
+      "source": "SIMBoxFraudAttempts",
+      "target": "RevenueLeakageVolume"
+    },
+    {
+      "source": "FraudPolicyStrictness",
+      "target": "SIMFraudDetectionRate"
+    },
+    {
+      "source": "FraudPolicyStrictness",
+      "target": "NetworkOpExCost"
+    },
+    {
+      "source": "SIMFraudDetectionRate",
+      "target": "RevenueLeakageVolume"
+    },
+    {
+      "source": "SIMFraudDetectionRate",
+      "target": "SubscriberRetentionScore"
+    },
+    {
+      "source": "RevenueLeakageVolume",
+      "target": "ARPUImpact"
+    },
+    {
+      "source": "RevenueLeakageVolume",
+      "target": "CashFlowRisk"
+    },
+    {
+      "source": "SubscriberRetentionScore",
+      "target": "ARPUImpact"
+    },
+    {
+      "source": "NetworkOpExCost",
+      "target": "CashFlowRisk"
+    },
+    {
+      "source": "NetworkLoad",
+      "target": "NetworkOpExCost"
+    },
+    {
+      "source": "RegulatorySignal",
+      "target": "ITURegulatoryPressure"
+    },
+    {
+      "source": "ITURegulatoryPressure",
+      "target": "FraudPolicyStrictness"
+    }
+  ],
+  "ate_map": {
+    "SIMBoxFraudAttempts->SubscriberRetentionScore": 1.6174,
+    "ITURegulatoryPressure->CashFlowRisk": 0.3386,
+    "RegulatorySignal->FraudPolicyStrictness": -0.0221,
+    "SIMBoxFraudAttempts->ARPUImpact": 0.6775,
+    "CallDataRecordVolume->NetworkLoad": -26.2347,
+    "NetworkOpExCost->CashFlowRisk": -17.4509,
+    "RegulatorySignal->RevenueLeakageVolume": -0.4377,
+    "SIMBoxFraudAttempts->CallDataRecordVolume": -41.8298,
+    "ITURegulatoryPressure->SIMFraudDetectionRate": -0.1145,
+    "FraudPolicyStrictness->RevenueLeakageVolume": -0.1814,
+    "SubscriberRetentionScore->ARPUImpact": -60.5119,
+    "RevenueLeakageVolume->CashFlowRisk": -5.6669,
+    "NetworkLoad->CashFlowRisk": -1.6075,
+    "CallDataRecordVolume->CashFlowRisk": 0.9531,
+    "SIMFraudDetectionRate->RevenueLeakageVolume": 3.4631,
+    "NetworkLoad->NetworkOpExCost": -1.7194,
+    "CallDataRecordVolume->NetworkOpExCost": 3.2104,
+    "ITURegulatoryPressure->SubscriberRetentionScore": 0.956,
+    "ITURegulatoryPressure->ARPUImpact": -3.1195,
+    "SIMBoxFraudAttempts->RevenueLeakageVolume": -11.4343,
+    "SIMBoxFraudAttempts->NetworkLoad": 0.9774,
+    "RegulatorySignal->CashFlowRisk": -0.1377,
+    "FraudPolicyStrictness->CashFlowRisk": -0.1614,
+    "RegulatorySignal->ITURegulatoryPressure": -8.3773,
+    "SIMFraudDetectionRate->CashFlowRisk": 0.6113,
+    "RegulatorySignal->SIMFraudDetectionRate": 0.6516,
+    "FraudPolicyStrictness->SIMFraudDetectionRate": -1.015,
+    "ITURegulatoryPressure->FraudPolicyStrictness": -0.7643,
+    "SIMBoxFraudAttempts->CashFlowRisk": -0.35,
+    "CallDataRecordVolume->ARPUImpact": -250.0577,
+    "SIMBoxFraudAttempts->NetworkOpExCost": 6.2846,
+    "RevenueLeakageVolume->ARPUImpact": 34.6018,
+    "ITURegulatoryPressure->RevenueLeakageVolume": -0.5975,
+    "RegulatorySignal->SubscriberRetentionScore": -4.4112,
+    "SIMBoxFraudAttempts->SIMFraudDetectionRate": -3.7548,
+    "FraudPolicyStrictness->SubscriberRetentionScore": 1.0902,
+    "RegulatorySignal->ARPUImpact": -5.6332,
+    "FraudPolicyStrictness->ARPUImpact": -0.5382,
+    "SIMFraudDetectionRate->SubscriberRetentionScore": -4.9969,
+    "SIMFraudDetectionRate->ARPUImpact": -8.6101
+  },
+  "n_edges": 16,
+  "algorithm": "GFCI",
+  "metadata": {
+    "sha256": "58ac43f7ddd4112943b67ec638981731ed6624b0321b17f7e1ba0fab4e7312c9",
+    "snapshot_status": "json-fallback",
+    "storage_backend": "json",
+    "canonical_json": "C:\\Users\\msgok\\OneDrive\\Desktop\\Project\\hackathon\\Rename\\data\\safety_map.json",
+    "sqlite_error": "disk I/O error"
+  }
+}

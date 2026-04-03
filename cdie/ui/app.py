@@ -13,6 +13,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+from cdie.ui.presentation import (
+    build_correlation_story,
+    compute_assumption_rows,
+    compute_structural_reliability,
+    compute_validation_summary,
+    derive_causal_path,
+    format_cate_rows,
+)
+
 API_URL = os.environ.get("API_URL", "http://localhost:8000")
 DATA_DIR = Path(
     os.environ.get("CDIE_DATA_DIR", Path(__file__).parent.parent.parent / "data")
@@ -358,6 +367,7 @@ if isinstance(query_result, dict) and query_result:
 
             src_var = query_result.get("source", "")
             tgt_var = query_result.get("target", "")
+            highlight = derive_causal_path(graph_data, str(src_var), str(tgt_var))
 
             for node in graph_data.get("nodes", []):  # type: ignore
                 if not isinstance(node, dict):
@@ -368,12 +378,14 @@ if isinstance(query_result, dict) and query_result:
                     if nid == src_var
                     else "#ef4444"
                     if nid == tgt_var
+                    else "#0f766e"
+                    if nid in highlight["nodes"]
                     else "#1e293b"
                 )
                 G.add_node(
                     nid,
                     color=color,
-                    borderWidth=2,
+                    borderWidth=4 if nid in highlight["nodes"] else 2,
                     font={"color": "#f8fafc", "size": 15},
                 )
 
@@ -383,9 +395,9 @@ if isinstance(query_result, dict) and query_result:
                 src = edge.get("from", edge.get("source", ""))  # type: ignore
                 tgt = edge.get("to", edge.get("target", ""))  # type: ignore
                 status = edge.get("refutation_status", "UNKNOWN")  # type: ignore
+                edge_key = f"{src}->{tgt}"
 
-                # Active path highlight
-                if src == src_var and tgt == tgt_var:
+                if edge_key in highlight["edges"]:
                     e_col = "#3b82f6"
                     w = 5
                 else:
@@ -419,15 +431,8 @@ if isinstance(query_result, dict) and query_result:
     c_val, c_ast = st.columns(2)
 
     with c_val:
-        ref = query_result.get("refutation_status", {})
-        if isinstance(ref, dict):
-            p = ref.get("placebo", "NOT_TESTED")
-            c = ref.get("confounder", "NOT_TESTED")
-            s = ref.get("subset", "NOT_TESTED")
-        else:
-            p = c = s = "NOT_TESTED"
-
-        score = int(sum(1 for x in [p, c, s] if x == "PASS") * 100 // 3)
+        validation = compute_validation_summary(query_result)
+        score = validation["score"]
         m_col = (
             "var(--color-valid)"
             if score == 100
@@ -443,9 +448,10 @@ if isinstance(query_result, dict) and query_result:
             <h3 style="margin:0;">🛡️ VALIDATION SCORE: {score}%</h3>
             <div class="val-meter-bg"><div class="val-meter-fill" style="width:{score}%; background:{m_col}; {m_shad}"></div></div>
             <div class="trust-checklist">
-                <div class="trust-item"><span class="trust-icon {"pass" if p == "PASS" else "warn"}">{"✔" if p == "PASS" else "⚠"}</span> Placebo Treatment</div>
-                <div class="trust-item"><span class="trust-icon {"pass" if c == "PASS" else "warn"}">{"✔" if c == "PASS" else "⚠"}</span> Random Confounder</div>
-                <div class="trust-item"><span class="trust-icon {"pass" if s == "PASS" else "warn"}">{"✔" if s == "PASS" else "⚠"}</span> Data Subset Stability</div>
+                {"".join(
+                    f'<div class="trust-item"><span class="trust-icon {"pass" if status == "PASS" else "warn" if status == "WARN" else "fail"}">{"✔" if status == "PASS" else "⚠" if status == "WARN" else "✖"}</span> {label}</div>'
+                    for label, status in validation["items"]
+                )}
             </div>
         </div>
         """,
@@ -462,15 +468,13 @@ if isinstance(query_result, dict) and query_result:
         )
         h_html = ""
         if isinstance(catl_data, dict) and catl_data:
-            for k, v in catl_data.items():
-                if not isinstance(v, dict):
-                    continue
-                stt = v.get("status", "UNKNOWN")
+            for row in compute_assumption_rows(catl_data):
+                stt = row["status"]
                 icon = "✔" if stt == "PASS" else "⚠" if stt == "WARN" else "✗"
                 cls = "pass" if stt == "PASS" else "warn" if stt == "WARN" else "fail"
-                h_html += f'<div class="trust-item"><span class="trust-icon {cls}">{icon}</span> {k.capitalize()}</div>'
-                if stt == "WARN":
-                    h_html += f'<div class="assumption-hint">→ May affect accuracy by ~5–10% ({v.get("tooltip", "")[:40]}...)</div>'
+                h_html += f'<div class="trust-item"><span class="trust-icon {cls}">{icon}</span> {row["label"]}</div>'
+                if stt == "WARN" and row["tooltip"]:
+                    h_html += f'<div class="assumption-hint">→ May affect accuracy by ~5–10% ({row["tooltip"][:60]}...)</div>'
 
         st.markdown(
             f"""
@@ -487,17 +491,17 @@ if isinstance(query_result, dict) and query_result:
     # ──────────────────────────────────────────
     st.markdown('<div class="flow-arrow">▼</div>', unsafe_allow_html=True)
     st.markdown("### 📉 Correlation vs Causation — The Critical Difference")
+    comparison_story = build_correlation_story(query_result)
 
     cb1, cb2 = st.columns(2)
     with cb1:
         st.markdown(
-            """
+            f"""
         <div class="comp-card comp-wrong">
             <div class="comp-header">🔴 Wrong AI (XGBoost)</div>
             <p style="font-size:1.05rem;"><strong>Decision:</strong> Optimize highly correlated features randomly.</p>
             <p style="color:var(--text-secondary); margin-top:12px; line-height:1.6;">
-                → Short-term metric appears to drop 📉<br>
-                → Long-term target remains unchanged or worsens ❌
+                {comparison_story["wrong_ai"]}
             </p>
         </div>
         """,
@@ -510,7 +514,7 @@ if isinstance(query_result, dict) and query_result:
             <div class="comp-header">🟢 Your AI (CDIE)</div>
             <p style="font-size:1.05rem;"><strong>Decision:</strong> Target the root cause ({query_result.get("source", "")}).</p>
             <p style="color:var(--text-secondary); margin-top:12px; line-height:1.6;">
-                → {query_result.get("target", "")} changes by {dir_sign}{abs(point):.1f} ✔<br>
+                {comparison_story["right_ai"]}<br>
                 → Validated mathematically by do-calculus.
             </p>
         </div>
@@ -519,9 +523,9 @@ if isinstance(query_result, dict) and query_result:
         )
 
     st.markdown(
-        """
+        f"""
     <div class="insight-box" style="margin-top:20px; text-align:center; border-left:none; border-top:4px solid var(--color-causal); border-radius:0 0 12px 12px;">
-        <strong>Key Difference:</strong> Correlation misleads due to shared causes (Simpson's Paradox). CDIE's causal model identifies the exact physical driver and isolates its standalone effect.
+        <strong>Key Difference:</strong> {comparison_story["insight"]}
     </div>
     """,
         unsafe_allow_html=True,
@@ -536,26 +540,8 @@ if isinstance(query_result, dict) and query_result:
         st.markdown("### 📊 Business Segments (CATE)")
         cates = query_result.get("cate_segments", {})
         if isinstance(cates, list) and cates:
-            rows = []
-            for seg in cates:
-                if isinstance(seg, dict):
-                    risk = seg.get("risk_level", "Low")
-                    emoji = (
-                        "🔴 Critical"
-                        if risk == "Critical"
-                        else "🟠 High"
-                        if risk == "High"
-                        else "🟢 Low"
-                    )
-                    rows.append(
-                        {
-                            "Segment": seg.get("segment", "?"),
-                            "Impact": f"{seg.get('ate', 0):.3f}",
-                            "CI": f"[{seg.get('ci_lower', 0):.3f}, {seg.get('ci_upper', 0):.3f}]",
-                            "Risk": emoji,
-                        }
-                    )
-            st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+            rows = format_cate_rows(cates)
+            st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
         else:
             st.info("No segment-level CATE data available for this query.")
 
@@ -568,27 +554,24 @@ if isinstance(query_result, dict) and query_result:
             if sm_data
             else {}
         )
-        acc = (
-            bench.get("own_scm", {}).get("f1", 0) * 100
-            if bench and isinstance(bench, dict)
-            else 0
-        )
+        reliability = compute_structural_reliability(query_result, bench if isinstance(bench, dict) else {})
+        acc = reliability["score"]
 
-        # UI Polish: Show F1/Precision/Recall explicitly if available
         metrics_text = ""
-        if acc > 0:
+        if bench and isinstance(bench, dict):
             own = bench.get("own_scm", {})
-            metrics_text = f"F1: {own.get('f1', 0):.2f} | P: {own.get('precision', 0):.2f} | R: {own.get('recall', 0):.2f}"
+            if isinstance(own, dict):
+                metrics_text = f"F1: {own.get('f1', 0):.2f} | P: {own.get('precision', 0):.2f} | R: {own.get('recall', 0):.2f}"
 
         st.markdown(
             f"""
         <div class="glass-card" style="padding: 30px;">
             <div style="font-size:3.5rem; font-weight:900; color:var(--color-bench); line-height:1;">{acc:.0f}%</div>
-            <div style="font-size:1.15rem; font-weight:700; margin-top:8px; color:var(--text-primary);">Accuracy across simulated ground-truth</div>
+            <div style="font-size:1.15rem; font-weight:700; margin-top:8px; color:var(--text-primary);">{reliability["headline"]}</div>
             <div style="font-size:0.85rem; color:var(--text-secondary); margin-top:4px; font-family:monospace;">{metrics_text}</div>
             <div style="font-size:0.95rem; color:var(--text-secondary); margin-top:12px; line-height:1.5;">
-                <span style="color:var(--color-bench);font-weight:700;">→ High structural reliability.</span><br>
-                The discovered Directed Acyclic Graph (DAG) has been mathematically validated against standard dataset benchmarks (SACHS / ALARM).
+                <span style="color:var(--color-bench);font-weight:700;">→ {reliability["headline"]}.</span><br>
+                {reliability["details"]}
             </div>
         </div>
         """,
@@ -624,7 +607,7 @@ if isinstance(query_result, dict) and query_result:
 
     col_btn1, col_btn2, _ = st.columns([1, 1, 4])
     with col_btn1:
-        if st.button("📋 Copy Hash", use_container_width=True):
+        if st.button("📋 Copy Hash", width="stretch"):
             st.toast(f"Hash copied: {h}...", icon="✅")
     with col_btn2:
         report_data = json.dumps(query_result, indent=2) if query_result else "{}"
@@ -633,7 +616,7 @@ if isinstance(query_result, dict) and query_result:
             data=report_data,
             file_name=f"cdie_report_{q_id}.json",
             mime="application/json",
-            use_container_width=True,
+            width="stretch",
         )
 
 else:

@@ -11,17 +11,24 @@ import networkx as nx
 from cdie.pipeline.data_generator import VARIABLE_NAMES
 
 
-# Domain-knowledge priors for financial fraud (replaces LLM priors)
+# Domain-knowledge priors for the telecom fraud SCM.
 DOMAIN_PRIORS = {
-    ("TransactionVolume", "FraudAttempts"): 0.8,
-    ("TransactionVolume", "SystemLoad"): 0.7,
-    ("FraudAttempts", "ChargebackVolume"): 0.85,
-    ("DetectionPolicyStrictness", "FraudDetectionRate"): 0.9,
-    ("FraudDetectionRate", "ChargebackVolume"): 0.75,
-    ("RegulatoryPressure", "DetectionPolicyStrictness"): 0.8,
-    ("ExternalNewsSignal", "RegulatoryPressure"): 0.7,
-    ("ChargebackVolume", "RevenueImpact"): 0.8,
-    ("OperationalCost", "LiquidityRisk"): 0.7,
+    ("CallDataRecordVolume", "SIMBoxFraudAttempts"): 0.95,
+    ("CallDataRecordVolume", "NetworkLoad"): 0.9,
+    ("CallDataRecordVolume", "ARPUImpact"): 0.7,
+    ("SIMBoxFraudAttempts", "SIMFraudDetectionRate"): 0.95,
+    ("SIMBoxFraudAttempts", "RevenueLeakageVolume"): 0.98,
+    ("FraudPolicyStrictness", "SIMFraudDetectionRate"): 0.98,
+    ("FraudPolicyStrictness", "NetworkOpExCost"): 0.85,
+    ("SIMFraudDetectionRate", "RevenueLeakageVolume"): 0.92,
+    ("SIMFraudDetectionRate", "SubscriberRetentionScore"): 0.8,
+    ("RevenueLeakageVolume", "ARPUImpact"): 0.95,
+    ("RevenueLeakageVolume", "CashFlowRisk"): 0.95,
+    ("RegulatorySignal", "SubscriberRetentionScore"): 0.65,
+    ("RegulatorySignal", "ITURegulatoryPressure"): 0.9,
+    ("ITURegulatoryPressure", "FraudPolicyStrictness"): 0.95,
+    ("NetworkLoad", "NetworkOpExCost"): 0.9,
+    ("NetworkOpExCost", "CashFlowRisk"): 0.88,
 }
 
 
@@ -109,11 +116,13 @@ def build_map_dag(discovered_edges, variable_names, dynamic_priors=None):
             src = dp.get("source")
             tgt = dp.get("target")
             conf = dp.get("confidence", 0.0)
-            if src and tgt and conf > 0.70:
+            if src in variable_names and tgt in variable_names and conf > 0.70:
                 merged_priors[(src, tgt)] = conf
 
     # Inject domain prior edges that don't create cycles
     for (src, tgt), weight in merged_priors.items():
+        if src not in variable_names or tgt not in variable_names:
+            continue
         if weight >= 0.7 and not G.has_edge(src, tgt) and not G.has_edge(tgt, src):
             G.add_edge(src, tgt)
             if not nx.is_directed_acyclic_graph(G):

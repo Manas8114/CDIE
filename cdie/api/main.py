@@ -8,11 +8,12 @@ import sys
 import json
 import uuid
 import time
+from contextlib import asynccontextmanager
 import psutil  # type: ignore
 from pathlib import Path
 from typing import List, Dict, Any
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, BackgroundTasks  # type: ignore
+from fastapi import FastAPI, HTTPException, UploadFile, File, BackgroundTasks, Body  # type: ignore
 from fastapi.middleware.cors import CORSMiddleware  # type: ignore
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -31,20 +32,149 @@ from cdie.api.models import (  # type: ignore
     GraphResponse,
     BenchmarkResponse,
     CATLResponse,
+    VariableCatalogResponse,
 )
 from pydantic import BaseModel  # type: ignore
 
 from cdie.api.lookup import SafetyMapLookup  # type: ignore
-from cdie.api.intent_parser import classify_query, DEMO_QUERIES, VARIABLE_ALIASES  # type: ignore
+from cdie.api.intent_parser import (  # type: ignore
+    classify_query,
+    DEMO_QUERIES,
+    VARIABLE_ALIASES,
+    build_query_suggestions,
+    get_variable_catalog,
+    suggest_variables,
+)
 from cdie.api.rag import ExplanationEngine  # type: ignore
 from cdie.api.drift import DriftAnalyzer  # type: ignore
 from cdie.pipeline.data_generator import VARIABLE_NAMES  # type: ignore
+from cdie.pipeline.data_merger import DataStoreManager  # type: ignore
+from cdie.runtime import get_runtime_paths
+
+# Initialize Store Manager
+store_manager = DataStoreManager()
+
+
+# Global instances
+DATA_DIR = Path(
+    os.environ.get("CDIE_DATA_DIR", Path(__file__).parent.parent.parent / "data")
+)
+RUNTIME_PATHS = get_runtime_paths(DATA_DIR)
+safety_map_lookup = SafetyMapLookup()
+explanation_engine = ExplanationEngine()
+
+
+def _normalize_magnitude(magnitude: float) -> float:
+    """Accept both 20 and 0.2 style inputs and normalize to percentage units."""
+    if magnitude != 0 and abs(magnitude) <= 1:
+        return magnitude * 100
+    return magnitude
+
+
+def _normalize_relative_fraction(magnitude: float) -> float:
+    """Accept both 20 and 0.2 style inputs and normalize to fractional units."""
+    if magnitude != 0 and abs(magnitude) > 1:
+        return magnitude / 100
+    return magnitude
+
+
+def _get_available_llm_endpoints() -> tuple[str | None, str | None]:
+    """Only use LLM endpoints when explicitly configured."""
+    tgi_url = os.environ.get("TGI_ENDPOINT")
+    llm_url = os.environ.get("OPEA_LLM_ENDPOINT")
+    return (tgi_url or None, llm_url or None)
+
+
+def _build_trust_message(match_type: str, confidence_label: str) -> str:
+    if match_type == "fallback":
+        return (
+            "No validated scenario matched this exact query. The result is a heuristic "
+            "fallback estimate and should be treated as directional guidance only."
+        )
+    if match_type == "nearest":
+        return (
+            "This answer uses the nearest validated scenario, not an exact precomputed "
+            "match. Review the effect size with caution before acting on it."
+        )
+    if confidence_label == "UNPROVEN":
+        return (
+            "A scenario was found, but validation checks or drift warnings reduce trust "
+            "in this estimate. Treat it as unproven until reviewed."
+        )
+    return "This answer comes from a validated precomputed scenario in the Safety Map."
+
+
+def _build_evidence_tier(match_type: str, confidence_label: str) -> str:
+    if match_type == "fallback":
+        return "heuristic"
+    if confidence_label == "UNPROVEN":
+        return "unproven"
+    if match_type == "nearest":
+        return "validated-nearest"
+    return "validated"
+
+
+def _resolve_variable_name(raw_name: str | None) -> str | None:
+    """Resolve free-form or aliased variable names to the canonical SCM name."""
+    if not raw_name:
+        return None
+
+    candidate = raw_name.strip()
+    if not candidate:
+        return None
+
+    if candidate in VARIABLE_NAMES:
+        return candidate
+
+    lowered = candidate.lower()
+    if lowered in VARIABLE_ALIASES:
+        return VARIABLE_ALIASES[lowered]
+
+    for alias, variable_name in sorted(
+        VARIABLE_ALIASES.items(), key=lambda item: -len(item[0])
+    ):
+        if alias in lowered:
+            return variable_name
+
+    return None
+
+def _load_safety_map() -> bool:
+    """Load the most reliable Safety Map representation available."""
+    db_path = DATA_DIR / "safety_map.db"
+    json_path = DATA_DIR / "safety_map.json"
+    runtime_db_path = RUNTIME_PATHS["runtime_db"]
+
+    loaded = False
+    if db_path.exists():
+        loaded = safety_map_lookup.load(str(db_path))
+
+    if not loaded and runtime_db_path.exists():
+        loaded = safety_map_lookup.load(str(runtime_db_path))
+
+    if not loaded and json_path.exists():
+        loaded = safety_map_lookup.load(str(json_path))
+
+    if loaded:
+        print(f"[API] Safety Map loaded from {safety_map_lookup.db_path}")
+    else:
+        print(f"[API] WARNING: Safety Map not found at {db_path} or {json_path}")
+        print(
+            "[API] Run the offline pipeline first: python -m cdie.pipeline.run_pipeline"
+        )
+    return loaded
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    _load_safety_map()
+    yield
 
 
 app = FastAPI(
     title="CDIE v4 — Causal Decision Intelligence Engine",
     version="4.0.0",
     description="Pre-computed causal intervention lookup with validation and uncertainty quantification.",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -53,32 +183,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Global instances
-DATA_DIR = Path(
-    os.environ.get("CDIE_DATA_DIR", Path(__file__).parent.parent.parent / "data")
-)
-safety_map_lookup = SafetyMapLookup()
-explanation_engine = ExplanationEngine()
-
-
-@app.on_event("startup")
-async def startup():
-    """Load Safety Map on startup."""
-    db_path = DATA_DIR / "safety_map.db"
-    json_path = DATA_DIR / "safety_map.json"
-
-    if db_path.exists():
-        safety_map_lookup.load(str(db_path))
-        print(f"[API] Safety Map loaded from {db_path} (SQLite)")
-    elif json_path.exists():
-        safety_map_lookup.load(str(json_path))
-        print(f"[API] Safety Map loaded from {json_path} (Legacy JSON)")
-    else:
-        print(f"[API] WARNING: Safety Map not found at {db_path} or {json_path}")
-        print(
-            "[API] Run the offline pipeline first: python -m cdie.pipeline.run_pipeline"
-        )
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -94,6 +198,7 @@ async def health():
         ks_status="OK",
         memory_mb=round(memory, 1),
         n_scenarios=metadata.get("n_scenarios", 0),
+        storage_backend=metadata.get("storage_backend", "unloaded"),
     )
 
 
@@ -119,20 +224,25 @@ async def query(request: QueryRequest):
         preset = DEMO_QUERIES[query_text]
         source = str(preset.get("source") or "")
         target = str(preset.get("target") or "")
-        magnitude = float(preset.get("value") or 0.1)
+        magnitude = _normalize_magnitude(float(preset.get("value") or 10.0))
     else:
         source = str(classification["source"] or "")
         target = str(classification["target"] or "")
-        magnitude = float(classification["magnitude"] or 20.0)
+        magnitude = _normalize_magnitude(float(classification["magnitude"] or 20.0))
+
+    variable_suggestions = suggest_variables(query_text)
+    query_suggestions = build_query_suggestions(source or None, target or None)
 
     if not source:
         raise HTTPException(
             422,
-            "Could not identify a variable in your query. Please check available variables.",
+            "Could not identify a valid variable in your query. Try one of: "
+            + ", ".join(variable_suggestions or VARIABLE_NAMES[:5]),
         )
 
     # Lookup scenario
     scenario, is_exact = safety_map_lookup.find_best_scenario(source, target, magnitude)
+    match_type = "exact" if scenario and is_exact else "nearest" if scenario else "fallback"
 
     # Universal fallback: if still no scenario, generate a realistic one from the query variables
     if not scenario and source:
@@ -177,10 +287,13 @@ async def query(request: QueryRequest):
             },
         }
         is_exact = False
+        match_type = "fallback"
 
     if not scenario:
         # Try with default magnitude
         scenario = safety_map_lookup.find_scenario(source, target)
+        if scenario:
+            match_type = "nearest"
 
     # KS staleness check
     training_dist = safety_map_lookup._get_store_val("training_distributions", {})
@@ -268,9 +381,14 @@ async def query(request: QueryRequest):
         analogies=analogies,
     )
 
-    extrapolation_note = (
-        "" if is_exact else " (Interpolated from nearest pre-computed scenario)"
-    )
+    extrapolation_note = ""
+    if match_type == "nearest":
+        extrapolation_note = " (Nearest validated scenario)"
+    elif match_type == "fallback":
+        extrapolation_note = " (Heuristic fallback estimate)"
+
+    evidence_tier = _build_evidence_tier(match_type, confidence_label)
+    trust_message = _build_trust_message(match_type, confidence_label)
 
     return QueryResponse(
         query_type=classification["type"],
@@ -288,6 +406,12 @@ async def query(request: QueryRequest):
         historical_analogies=[a["text"] for a in analogies[:3]],
         cate_segments=cate_segments,
         confidence_label=confidence_label,
+        match_type=match_type,
+        evidence_tier=evidence_tier,
+        trust_message=trust_message,
+        used_fallback=match_type == "fallback",
+        suggested_queries=query_suggestions,
+        available_variables=variable_suggestions or VARIABLE_NAMES[:5],
     )
 
 
@@ -343,6 +467,12 @@ async def get_demo_queries():
     return DEMO_QUERIES
 
 
+@app.get("/variables", response_model=VariableCatalogResponse)
+async def get_variables():
+    """Return variable metadata and example prompts for the UI."""
+    return VariableCatalogResponse(variables=get_variable_catalog())
+
+
 @app.post("/prescribe", response_model=PrescribeResponse)
 async def prescribe(request: PrescribeRequest):
     """Find the top interventions to maximize or minimize a target using LLM target resolution."""
@@ -350,10 +480,9 @@ async def prescribe(request: PrescribeRequest):
         raise HTTPException(503, "Safety Map not loaded.")
 
     # Use LLM to resolve target from natural language if needed
-    tgi_url = os.environ.get("TGI_ENDPOINT", "http://tgi-service:80")
-    llm_url = os.environ.get("OPEA_LLM_ENDPOINT", "http://opea-llm-textgen:9000")
+    tgi_url, llm_url = _get_available_llm_endpoints()
     raw_target = request.target.strip()
-    resolved_target = raw_target
+    resolved_target = _resolve_variable_name(raw_target) or raw_target
 
     prompt = f"""
     Map the following target query to one of these valid causal variables: {", ".join(VARIABLE_NAMES)}
@@ -365,32 +494,36 @@ async def prescribe(request: PrescribeRequest):
         import requests  # type: ignore[import-untyped]
 
         # Attempt direct TGI first for fast /generate
-        response = requests.post(
-            f"{tgi_url}/generate",
-            json={"inputs": prompt, "parameters": {"max_new_tokens": 32}},
-            timeout=3,
-        )
-        if response.status_code != 200:
-            # Try OPEA OpenAI-compatible endpoint as fallback
-            payload = {
-                "model": os.environ.get("LLM_MODEL_ID", "Intel/neural-chat-7b-v3-3"),
-                "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 32,
-            }
+        suggested = ""
+        response = None
+
+        if tgi_url:
             response = requests.post(
-                f"{llm_url}/v1/chat/completions", json=payload, timeout=5
+                f"{tgi_url}/generate",
+                json={"inputs": prompt, "parameters": {"max_new_tokens": 32}},
+                timeout=3,
             )
-            if response.status_code == 200:
-                suggested = (
-                    response.json()
-                    .get("choices", [{}])[0]
-                    .get("message", {})
-                    .get("content", "")
-                    .strip()
+
+        if response is None or response.status_code != 200:
+            # Try OPEA OpenAI-compatible endpoint as fallback
+            if llm_url:
+                payload = {
+                    "model": os.environ.get("LLM_MODEL_ID", "Intel/neural-chat-7b-v3-3"),
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 32,
+                }
+                response = requests.post(
+                    f"{llm_url}/v1/chat/completions", json=payload, timeout=5
                 )
-            else:
-                suggested = ""
-        else:
+                if response.status_code == 200:
+                    suggested = (
+                        response.json()
+                        .get("choices", [{}])[0]
+                        .get("message", {})
+                        .get("content", "")
+                        .strip()
+                    )
+        elif response is not None:
             suggested = response.json().get("generated_text", "").strip()
 
         if suggested:
@@ -398,33 +531,20 @@ async def prescribe(request: PrescribeRequest):
             suggested = (
                 suggested.split("\n")[-1].split(":")[-1].strip().strip('"').strip("'")
             )
-            if suggested in VARIABLE_NAMES:
-                resolved_target = suggested
+            normalized_suggested = _resolve_variable_name(suggested)
+            if normalized_suggested:
+                resolved_target = normalized_suggested
             else:
-                # Fallback to fuzzy match
-                for alias, var_name in sorted(
-                    VARIABLE_ALIASES.items(), key=lambda x: -len(x[0])
-                ):
-                    if (
-                        alias.lower() in raw_target.lower()
-                        or raw_target.lower() in alias.lower()
-                    ):
-                        resolved_target = var_name
-                        break
+                normalized_raw = _resolve_variable_name(raw_target)
+                if normalized_raw:
+                    resolved_target = normalized_raw
     except Exception as e:
         print(
             f"[API] LLM Target Resolution failed: {e}. Falling back to fuzzy matching."
         )
-        # Fallback to current behavior
-        for alias, var_name in sorted(
-            VARIABLE_ALIASES.items(), key=lambda x: -len(x[0])
-        ):
-            if (
-                alias.lower() in raw_target.lower()
-                or raw_target.lower() in alias.lower()
-            ):
-                resolved_target = var_name
-                break
+        normalized_raw = _resolve_variable_name(raw_target)
+        if normalized_raw:
+            resolved_target = normalized_raw
 
     prescriptions = safety_map_lookup.find_prescriptions(
         target=resolved_target, limit=request.limit, maximize=request.maximize
@@ -816,9 +936,10 @@ async def extract_priors(file: UploadFile = File(...)):
         raise HTTPException(500, f"Prior extraction failed: {e}")
 
 
-@app.post("/ingest")
-async def ingest_data(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
-    """Ingest new observational data and optionally run the offline pipeline."""
+async def _ingest_uploaded_file(
+    background_tasks: BackgroundTasks, file: UploadFile
+) -> dict[str, Any]:
+    """Ingest new observational data and merge into the master store."""
     from cdie.pipeline.data_ingestion import DataIngestionRouter
     from cdie.pipeline.catl import run_catl
     from cdie.pipeline.data_generator import VARIABLE_NAMES
@@ -829,48 +950,72 @@ async def ingest_data(background_tasks: BackgroundTasks, file: UploadFile = File
         file_obj = io.BytesIO(contents)
         df, warnings = DataIngestionRouter.ingest(file_obj, str(file.filename))
 
-        # Run CATL to strictly gatekeep
+        # 1. Delta-CATL check (on new data only)
         catl_results = run_catl(df, VARIABLE_NAMES)
-
-        # Check for adversarial injection or CATL failure
         summary = catl_results.get("_summary", {})
+        
         if summary.get("overall") == "ADVERSARIAL_SUSPECTED":
             return {
                 "status": "rejected",
                 "reason": "ADVERSARIAL_SUSPECTED",
                 "filename": file.filename,
-                "adversarial_columns": summary.get("adversarial_columns", []),
-                "message": "Data poisoning patterns detected. Manual review required.",
                 "catl_report": catl_results,
             }
 
-        catl_failures = []
-        if catl_results.get("positivity", {}).get("status") == "FAIL":
-            catl_failures.append("Positivity check failed: Zero variance detected.")
+        # 2. Merge into Master Store
+        merged_df, merge_warnings = store_manager.merge_data(df)
+        warnings.extend(merge_warnings)
 
-        if catl_failures:
-            return {
-                "status": "rejected",
-                "filename": file.filename,
-                "reasons": catl_failures,
-                "catl_report": catl_results,
-            }
-
-        # If it passes, run the pipeline in background
+        # 3. Trigger Pipeline on Cumulative Data
         from cdie.pipeline.run_pipeline import run_pipeline
-
-        background_tasks.add_task(run_pipeline, df)
+        background_tasks.add_task(run_pipeline, merged_df)
 
         return {
             "status": "accepted",
             "filename": file.filename,
-            "rows_ingested": len(df),
+            "rows_delta": len(df),
+            "rows_cumulative": len(merged_df),
             "warnings": warnings,
-            "catl_summary": summary,
-            "message": "Data imported successfully. The CDIE pipeline is now running in the background to update the Safety Map.",
+            "message": "Data merged successfully. Pipeline updating Safety Map in background.",
         }
     except Exception as e:
         raise HTTPException(500, f"Ingestion failed: {e}")
+
+
+@app.post("/ingest")
+async def ingest_data(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
+    """Ingest new observational data and merge into master store."""
+    return await _ingest_uploaded_file(background_tasks, file)
+
+
+@app.post("/api/ingest")
+async def ingest_data_compat(
+    background_tasks: BackgroundTasks, file: UploadFile = File(...)
+):
+    """Backward-compatible alias for older UIs that post to /api/ingest."""
+    return await _ingest_uploaded_file(background_tasks, file)
+
+
+@app.post("/ingest/sql")
+async def ingest_sql(background_tasks: BackgroundTasks, uri: str, query: str):
+    """Ingest data from a SQL database URI and merge."""
+    from cdie.pipeline.data_ingestion import DataIngestionRouter
+    
+    try:
+        df, warnings = DataIngestionRouter.ingest_from_sql(uri, query)
+        merged_df, merge_warnings = store_manager.merge_data(df)
+        
+        from cdie.pipeline.run_pipeline import run_pipeline
+        background_tasks.add_task(run_pipeline, merged_df)
+
+        return {
+            "status": "accepted",
+            "rows_ingested": len(df),
+            "rows_total": len(merged_df),
+            "warnings": warnings + merge_warnings,
+        }
+    except Exception as e:
+        raise HTTPException(500, f"SQL Ingestion failed: {e}")
 
 
 # ═══════════════════════════════════════════════════════
@@ -928,7 +1073,21 @@ async def get_drift_timeline():
 @app.get("/api/drift/compare")
 async def compare_drift(id_from: int, id_to: int):
     """Compare two DAG snapshots for structural and ATE drift."""
-    return drift_analyzer.compare_snapshots(id_from, id_to)
+    result = drift_analyzer.compare_snapshots(id_from, id_to)
+    if "error" in result:
+        raise HTTPException(404, result["error"])
+    return result
+
+
+class DriftCompareRequest(BaseModel):
+    id_from: int
+    id_to: int
+
+
+@app.post("/api/drift/compare")
+async def compare_drift_post(req: DriftCompareRequest):
+    """Backward-compatible POST variant for older dashboards."""
+    return await compare_drift(req.id_from, req.id_to)
 
 
 @app.get("/api/drift/edge-history")
@@ -943,11 +1102,58 @@ async def get_edge_drift(source: str, target: str):
 
 
 class BacktestRequest(BaseModel):
-    source: str
-    target: str
+    source: str | None = None
+    target: str | None = None
+    intervention: str | None = None
+    outcome: str | None = None
     magnitude: float = 0.2
     start_index: int = 0
     end_index: int | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+
+
+def _resolve_backtest_window(
+    data,
+    start_index: int,
+    end_index: int | None,
+    start_date: str | None,
+    end_date: str | None,
+) -> tuple[int, int | None]:
+    """Support both index-based and date-based windows for backtesting."""
+    if not start_date and not end_date:
+        return start_index, end_index
+
+    date_col = next(
+        (
+            column
+            for column in ["timestamp", "Timestamp", "date", "Date", "event_date"]
+            if column in data.columns
+        ),
+        None,
+    )
+    if not date_col:
+        return start_index, end_index
+
+    date_series = pd.to_datetime(data[date_col], errors="coerce")
+    resolved_start = start_index
+    resolved_end = end_index
+
+    if start_date:
+        start_ts = pd.to_datetime(start_date, errors="coerce")
+        if pd.notna(start_ts):
+            matching = data.index[date_series >= start_ts]
+            if len(matching) > 0:
+                resolved_start = int(matching[0])
+
+    if end_date:
+        end_ts = pd.to_datetime(end_date, errors="coerce")
+        if pd.notna(end_ts):
+            matching = data.index[date_series <= end_ts]
+            if len(matching) > 0:
+                resolved_end = int(matching[-1]) + 1
+
+    return resolved_start, resolved_end
 
 
 @app.post("/api/backtest")
@@ -965,13 +1171,33 @@ async def run_backtest(req: BacktestRequest):
     else:
         data = generate_scm_data()
 
+    source_name = _resolve_variable_name(req.source or req.intervention)
+    target_name = _resolve_variable_name(req.target or req.outcome)
+
+    if source_name and not target_name:
+        target_name = DEFAULT_TARGETS.get(source_name, "ARPUImpact")
+
+    if not source_name or not target_name:
+        raise HTTPException(
+            400,
+            "Backtest requires a valid source/intervention and target/outcome variable.",
+        )
+
+    start_index, end_index = _resolve_backtest_window(
+        data,
+        req.start_index,
+        req.end_index,
+        req.start_date,
+        req.end_date,
+    )
+
     bt = Backtester(data)
     result = bt.backtest(
-        source=req.source,
-        target=req.target,
-        magnitude=req.magnitude,
-        start_index=req.start_index,
-        end_index=req.end_index,
+        source=source_name,
+        target=target_name,
+        magnitude=_normalize_relative_fraction(req.magnitude),
+        start_index=start_index,
+        end_index=end_index,
     )
 
     if "error" in result:
@@ -1004,9 +1230,13 @@ async def run_batch_backtest(req: BatchBacktestRequest):
     results = bt.batch_backtest(
         source=req.source,
         targets=req.targets,
-        magnitude=req.magnitude,
+        magnitude=_normalize_relative_fraction(req.magnitude),
     )
-    return {"source": req.source, "magnitude": req.magnitude, "results": results}
+    return {
+        "source": req.source,
+        "magnitude": _normalize_relative_fraction(req.magnitude),
+        "results": results,
+    }
 
 
 # ═══════════════════════════════════════════════════════

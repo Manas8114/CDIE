@@ -113,6 +113,11 @@ This starts **7 containers**: TGI → OPEA TextGen → TEI Embedding → TEI Rer
 # Install Python dependencies
 pip install -r requirements.txt
 
+# Recommended: keep runtime state on a local writable disk
+export CDIE_RUNTIME_DIR=/tmp/cdie-runtime
+# Windows PowerShell:
+# $env:CDIE_RUNTIME_DIR="C:\cdie-runtime"
+
 # Run the offline causal discovery pipeline
 python -m cdie.pipeline.run_pipeline
 
@@ -122,6 +127,14 @@ python -m uvicorn cdie.api.main:app --host 0.0.0.0 --port 8000
 # Start the Next.js frontend (production)
 cd frontend && npm install && npm run dev
 ```
+
+### Runtime Storage Recommendation
+
+- `data/` stores canonical artifacts such as `safety_map.json`
+- `CDIE_RUNTIME_DIR` stores runtime SQLite mirrors and drift history
+- avoid OneDrive/network-synced folders for `CDIE_RUNTIME_DIR`
+
+See [`docs/DEPLOYMENT_READINESS.md`](docs/DEPLOYMENT_READINESS.md) for the deployment checklist.
 
 ---
 

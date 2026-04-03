@@ -16,33 +16,66 @@ class SchemaContractError(Exception):
     pass
 
 
-# Common column aliases → canonical CDIE variable names
 COLUMN_ALIASES: Dict[str, str] = {
     "cdr_volume": "CallDataRecordVolume",
-    "call_data_record_volume": "CallDataRecordVolume",
-    "CDR_Volume": "CallDataRecordVolume",
+    "call_volume": "CallDataRecordVolume",
+    "records_count": "CallDataRecordVolume",
+    "total_calls": "CallDataRecordVolume",
+    
     "sim_box_fraud": "SIMBoxFraudAttempts",
-    "simbox_fraud_attempts": "SIMBoxFraudAttempts",
-    "fraud_attempts": "SIMBoxFraudAttempts",
+    "simbox_attempts": "SIMBoxFraudAttempts",
+    "fraud_events": "SIMBoxFraudAttempts",
+    "detected_fraud": "SIMBoxFraudAttempts",
+    
     "fraud_policy": "FraudPolicyStrictness",
-    "policy_strictness": "FraudPolicyStrictness",
+    "policy_level": "FraudPolicyStrictness",
+    "strictness_index": "FraudPolicyStrictness",
+    "security_threshold": "FraudPolicyStrictness",
+    
     "detection_rate": "SIMFraudDetectionRate",
-    "fraud_detection_rate": "SIMFraudDetectionRate",
+    "accuracy_score": "SIMFraudDetectionRate",
+    "capture_rate": "SIMFraudDetectionRate",
+    "mitigation_efficiency": "SIMFraudDetectionRate",
+    
     "revenue_leakage": "RevenueLeakageVolume",
-    "leakage_volume": "RevenueLeakageVolume",
+    "leakage_amount": "RevenueLeakageVolume",
+    "financial_loss": "RevenueLeakageVolume",
+    "unbilled_revenue": "RevenueLeakageVolume",
+    
     "subscriber_retention": "SubscriberRetentionScore",
-    "retention_score": "SubscriberRetentionScore",
+    "loyalty_score": "SubscriberRetentionScore",
+    "churn_rate_inverse": "SubscriberRetentionScore",
+    "retention_index": "SubscriberRetentionScore",
+    
     "arpu": "ARPUImpact",
-    "arpu_impact": "ARPUImpact",
+    "average_revenue": "ARPUImpact",
+    "billing_impact": "ARPUImpact",
+    "wallet_share": "ARPUImpact",
+    
     "opex": "NetworkOpExCost",
-    "network_opex": "NetworkOpExCost",
-    "cash_flow": "CashFlowRisk",
-    "cashflow_risk": "CashFlowRisk",
+    "operating_expenditure": "NetworkOpExCost",
+    "maintenance_cost": "NetworkOpExCost",
+    "efficiency_drain": "NetworkOpExCost",
+    
+    "cash_flow_risk": "CashFlowRisk",
+    "liquidity_risk": "CashFlowRisk",
+    "bad_debt_exposure": "CashFlowRisk",
+    "default_prob": "CashFlowRisk",
+    
     "network_load": "NetworkLoad",
+    "traffic_mb": "NetworkLoad",
+    "utilization_pct": "NetworkLoad",
+    "bandwidth_demand": "NetworkLoad",
+    
     "regulatory_signal": "RegulatorySignal",
-    "reg_signal": "RegulatorySignal",
+    "compliance_alert": "RegulatorySignal",
+    "government_mandate": "RegulatorySignal",
+    "legal_signal": "RegulatorySignal",
+    
     "itu_pressure": "ITURegulatoryPressure",
-    "regulatory_pressure": "ITURegulatoryPressure",
+    "un_sdg_pressure": "ITURegulatoryPressure",
+    "global_standard_gap": "ITURegulatoryPressure",
+    "compliance_burden": "ITURegulatoryPressure",
 }
 
 # Physical value constraints per variable

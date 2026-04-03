@@ -51,8 +51,8 @@ def compute_ate_dml(data, treatment, outcome, confounders=None):
         else:
             W = None
 
-        T = data[[treatment]].values
-        Y = data[outcome].values
+        T = data[treatment].values.ravel()
+        Y = data[outcome].values.ravel()
 
         is_discrete = False
         unique_vals = len(np.unique(data[treatment].dropna()))

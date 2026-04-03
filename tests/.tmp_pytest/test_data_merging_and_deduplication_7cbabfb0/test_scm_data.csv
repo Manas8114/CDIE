@@ -1,0 +1,4 @@
+CallDataRecordVolume,SIMBoxFraudAttempts,FraudPolicyStrictness,SIMFraudDetectionRate,RevenueLeakageVolume,SubscriberRetentionScore,ARPUImpact,NetworkOpExCost,CashFlowRisk,NetworkLoad,RegulatorySignal,ITURegulatoryPressure,CustomerSegment,TimeIndex
+1000,10,,,,,,,,,,,Consumer,0
+2000,20,,,,,,,,,,,Consumer,1
+3000,30,,,,,,,,,,,Consumer,2
