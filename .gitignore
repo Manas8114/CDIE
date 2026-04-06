@@ -47,10 +47,24 @@ frontend/out/
 
 # Test artifacts
 .pytest_cache/
+tests/.tmp_pytest/
 htmlcov/
 .coverage
+
+# Runtime & cache
+CDIE_RUNTIME_DIR/
+*.cache
+
+# Archives
+*.zip
+*.tar.gz
+*.rar
 
 # Misc
 *.log
 ruff_errors.txt
+api_crash.log
+test_out.txt
+to_do.md
+debug_lookup.py
 .agent

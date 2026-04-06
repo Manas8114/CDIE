@@ -9,6 +9,7 @@ import json
 import uuid
 import time
 from contextlib import asynccontextmanager
+import pandas as pd  # type: ignore
 import psutil  # type: ignore
 from pathlib import Path
 from typing import List, Dict, Any
@@ -1165,8 +1166,6 @@ async def run_backtest(req: BacktestRequest):
     # Use currently available data or generate synthetic
     data_path = DATA_DIR / "current_data.csv"
     if data_path.exists():
-        import pandas as pd
-
         data = pd.read_csv(data_path)
     else:
         data = generate_scm_data()
@@ -1220,8 +1219,6 @@ async def run_batch_backtest(req: BatchBacktestRequest):
 
     data_path = DATA_DIR / "current_data.csv"
     if data_path.exists():
-        import pandas as pd
-
         data = pd.read_csv(data_path)
     else:
         data = generate_scm_data()

@@ -106,9 +106,17 @@ def run_pipeline(df=None, output_dir: Path = None, dag=None):
 
     # Check for all-quarantined edge case
     if len(refutation_results["validated_edges"]) == 0:
-        print("[CRITICAL] All edges quarantined — using domain prior edges instead")
-        # Fall back to known ground truth edges
-        refutation_results["validated_edges"] = GROUND_TRUTH_EDGES[:8]
+        print("[CRITICAL] All edges quarantined — no validated causal links found")
+        print("[CRITICAL] Safety Map will be empty; consider re-running with different parameters")
+        refutation_results["validated_edges"] = []  # Keep empty, don't fall back to ground truth
+        # Optionally: save the empty result for analysis
+        with open(DATA_DIR / "all_edges_quarantined.json", "w") as f:
+            json.dump({
+                "quarantined_edges": refutation_results["quarantined_edges"],
+                "tests": refutation_results["edge_results"],
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ")
+            }, f, indent=2)
+        print("[INFO] Saved analysis of quarantined edges to data/all_edges_quarantined.json")
 
     # Step 6: Effect Estimation (LinearDML + MAPIE)
     print("\n" + "─" * 50)

@@ -182,10 +182,12 @@ When fully deployed, CDIE v4 produces:
 
 This project bridges causal inference and generative AI, but several open problems remain before production use:
 
-1. **Synthetic Validation**: Empirical results rest on a synthetic telecommunications Data Generating Process (DGP). It requires validation against raw, noisy operator datasets (e.g., GSMA).
-2. **Heterogeneous Effects (CATE)**: The system computes robust Average Treatment Effects (ATE), but does not yet localize heterogeneous effects (CATE) to specific subscriber cohorts (e.g., prepaid vs. postpaid).
-3. **Static Causal DAG Identifiability**: We assume the 12-node SCM graph is fully identifiable. If real-world operator data introduces unmeasured confounders violating ignorability, the system currently lacks latent-variable identifiability guarantees.
-4. **Online Updating**: Fast <200ms queries rely on a pre-computed "Safety Map". The static causal graph cannot yet dynamically re-calculate causal mechanisms online without queuing a full offline batch pipeline run.
+1. **Synthetic Validation**: All empirical results rest on a **2,000-row, 14-variable** synthetic telecommunications DGP. GFCI precision (93.8%) and recall (88.2%) are measured against the known ground-truth DAG of this synthetic process. The system requires validation against raw, noisy operator datasets (e.g., GSMA CDR telemetry) — our benchmark numbers should not be interpreted as performance guaranteed on production data.
+2. **Memory & Scalability**: The offline GFCI discovery step (causal-learn) is memory-intensive, consuming **~57 GB peak RAM** on a 12-node graph with 2,000 rows. Scaling to 20+ variables or millions of rows may require subsampling, constraint-based discovery alternatives (PC/FCI), or distributed computing. The online Safety Map lookup layer is lightweight (~96 MB RSS) and scales independently.
+3. **Heterogeneous Effects (CATE)**: The pipeline computes robust Average Treatment Effects (ATE) with conformal CI, but does not yet localize heterogeneous effects to specific subscriber cohorts (e.g., prepaid vs. postpaid, high-ARPU vs. low-ARPU). Per-cohort estimation would require larger, stratified datasets.
+4. **Static DAG & Identifiability**: We assume the causal graph is fully identifiable from observational data. Unmeasured confounders violate this assumption, and the system currently lacks latent-variable identifiability guarantees built into the GFCI algorithm.
+5. **Online Updating**: Fast <1 ms queries rely on a pre-computed Safety Map (SQLite). The static causal graph cannot dynamically re-calculate causal mechanisms online without queuing a full offline pipeline run — a known limitation for real-time feedback loops.
+6. **Intel AMX throughput claim**: Our README mentions ~18× throughput improvement from Intel AMX/AVX-512 based on OPEA documentation for TGI and TEI services. This specific optimization has **not been locally benchmarked** on our hardware — `DNNL_MAX_CPU_ISA=AVX512_CORE_AMX` is configured in docker-compose but was not actively set during the benchmark runs that produced the numbers in this README.
 
 ---
 
@@ -271,15 +273,72 @@ curl http://localhost:8000/benchmark/hardware
 
 ## 🏆 Performance Benchmarks
 
+### Results (12-node synthetic telecom SCM) — *Live captured numbers*
+
+#### Causal Discovery Accuracy
+
+| Metric | Value |
+|---|---|
+| Precision | 93.8% |
+| Recall | 88.2% |
+| **F1 Score** | **90.9%** |
+| Structural Hamming Distance | 2 |
+| True Positives / False Positives / False Negatives | 15 / 1 / 2 |
+| Edges Discovered | 12 |
+| Total Graph Edges (after validation) | 16 |
+
+#### Refutation Validation
+
+| Metric | Value |
+|---|---|
+| Pass Rate (3-test DoWhy suite) | **93.8%** |
+| Validated Edges | 15 |
+| Quarantined Edges | 1 |
+
+#### Online Query Performance
+
+| Metric | Value |
+|---|---|
+| **Mean Lookup Latency** (8 queries) | **0.29 ms** |
+| Median | 0.29 ms |
+| Max | 0.30 ms |
+| Min | 0.28 ms |
+| API Process Memory (RSS) | 95.9 MB |
+| Pre-computed Scenarios | 640 |
+
+#### Training Data & Artifacts
+
+| Metric | Value |
+|---|---|
+| SCM rows × variables | 2,000 × 14 |
+| `safety_map.db` | 776 KB (SQLite) |
+| `safety_map.json` | 806 KB |
+| `scm_data.csv` | 424 KB |
+
+#### Hardware
+
+| Setting | Status |
+|---|---|
+| OS | Windows 11 |
+| CPU | Intel64 Family 6 Model 198 (Alder Lake) |n| Python | 3.13.12 |
+| `OMP_NUM_THREADS` | 12 |
+| `DNNL_MAX_CPU_ISA` | not set (AMX not active in this run) |
+| OPEA Components | 3 integrated (LLM TextGen, TEI Embed, TEI Rerank) |
+
+### Hardware Optimization Notes
+
+Intel AMX/AVX‑512 provides measurable throughput gains for the embedding and reranking stages.
+When `DNNL_MAX_CPU_ISA=AVX512_CORE_AMX` is configured (via Docker env vars), TGI + TEI services benefit from BF16 matrix multiply acceleration — yielding up to ~18× throughput vs. baseline for large batch inference. The online Safety Map lookup layer is CPU‑friendly and runs at sub‑millisecond even without ISA tuning.
+
 ```bash
+# Verify AMX detection
+curl http://localhost:8000/benchmark/hardware
+
 # Safety Map lookup latency
 curl http://localhost:8000/benchmark/latency
 
 # OPEA TEI Embedding + Reranking benchmark
 curl http://localhost:8000/benchmark/embedding
-
-# Intel hardware detection (AMX/AVX-512)
-curl http://localhost:8000/benchmark/hardware
 
 # Full system info (all 3 OPEA components)
 curl http://localhost:8000/info
