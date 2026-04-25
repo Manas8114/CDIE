@@ -1,0 +1,46 @@
+%% CDIE v5 — Flowchart
+%% Decision logic for query handling
+flowchart TD
+    A(["Receive Query"])
+    A --> B{"Has Valid<br/>Query Record?"}
+    B -->|"Yes"| C["Return Cached<br/>from safety_map.db<br/>less than 0.3ms"]
+    B -->|"No"| D["Classify Intent<br/>4 Types"]
+
+    D --> E{Intent}
+    E -->|"intervention"| F1["Build Intervention<br/>Fingerprint"]
+    E -->|"counterfactual"| F2["Build CF Scenario<br/>Fingerprint"]
+    E -->|"root_cause"| F3["Build Root Cause<br/>Fingerprint"]
+    E -->|"temporal"| F4["Build Temporal<br/>Fingerprint"]
+
+    F1 --> G["Query Safety<br/>Map DB"]
+    F2 --> G
+    F3 --> G
+    F4 --> G
+
+    G --> H{Exact?}
+    H -->|"Yes, valid"| I["Validate<br/>Drift (KS)"]
+    H -->|"No"| J["Nearest-Neighbor<br/>Heuristic"]
+
+    I --> K{"KS p greater than 0.05?"}
+    K -->|"Yes"| L["Return Cached +<br/>Confidence Level"]
+    K -->|"No"| M["Mark Cache<br/>Stale to RAG"]
+
+    J --> N["Backfill New<br/>Scenario to DB"]
+    N --> O
+    M --> O
+
+    O["Generate RAG<br/>Intelligence Report"]
+    O --> P["1. TEI Embed<br/>query"]
+    P --> Q["2. Retrieve<br/>Top-6 Playbooks"]
+    Q --> R["3. TEI Rerank<br/>Semantic Precision"]
+    R --> S["4. OPEA LLM<br/>TGI Backend"]
+    S --> T["5. Structured<br/>Markdown Report"]
+    T --> U["Append Causal<br/>Evidence plus CIs"]
+    U --> V["Add Prescriptive<br/>Rankings"]
+    V --> W(["Return Response<br/>JSON"])
+    L --> W
+
+    style A fill:#4caf50,color:#fff
+    style C fill:#2196f3,color:#fff
+    style W fill:#ff9800,color:#fff
+    style O fill:#ff9800,color:#fff

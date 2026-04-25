@@ -1,0 +1,86 @@
+%% CDIE v5 — ER Diagram (Safety Map SQLite Schema)
+%% Database entities and relationships
+erDiagram
+    SCENARIOS {
+        INTEGER scenario_id PK
+        TEXT variable_name
+        TEXT direction
+        FLOAT magnitude_pct
+        FLOAT ate
+        FLOAT ci_lower
+        FLOAT ci_upper
+        FLOAT confidence_score
+        TEXT match_type
+        TEXT sha256_hash
+        TIMESTAMP created_at
+    }
+
+    VALIDATED_EDGES {
+        INTEGER edge_id PK
+        TEXT source_variable
+        TEXT target_variable
+        FLOAT effect_estimate
+        FLOAT p_value
+        TEXT refutation_status
+        TEXT confidence_label
+    }
+
+    DRIFT_LOGS {
+        INTEGER drift_id PK
+        TEXT variable_name
+        FLOAT ks_statistic
+        FLOAT p_value
+        BOOLEAN is_drifted
+        TIMESTAMP checked_at
+        TEXT snapshot_hash
+    }
+
+    EXPERT_CORRECTIONS {
+        INTEGER correction_id PK
+        TEXT edge_source
+        TEXT edge_target
+        TEXT correction_type
+        TEXT explanation
+        TEXT expert_id
+        TIMESTAMP corrected_at
+        BOOLEAN applied_to_next_run
+    }
+
+    BENCHMARK_RESULTS {
+        INTEGER benchmark_id PK
+        TEXT dataset_name
+        FLOAT precision
+        FLOAT recall
+        FLOAT f1_score
+        INTEGER shd
+        INTEGER true_positives
+        INTEGER false_positives
+        INTEGER false_negatives
+        TIMESTAMP eval_date
+    }
+
+    PLAYBOOKS {
+        INTEGER playbook_id PK
+        TEXT title
+        TEXT domain
+        FLOAT embedding_id FK
+        TEXT content_json
+        CATEGORY category
+    }
+
+    QUERY_LOG {
+        INTEGER query_id PK
+        TEXT query_text
+        TEXT intent_type
+        TEXT matched_scenario
+        FLOAT latency_ms
+        TIMESTAMP queried_at
+        TEXT user_id
+        BOOLEAN used_cache
+    }
+
+    SCENARIOS ||--o{ DRIFT_LOGS : "monitored_by"
+    SCENARIOS ||--o{ QUERY_LOG : "matched_by"
+    VALIDATED_EDGES ||--o{ EXPERT_CORRECTIONS : "corrected_by"
+    BENCHMARK_RESULTS }o--o{ VALIDATED_EDGES : "evaluates"
+    PLAYBOOKS ||--o{ SCENARIOS : "informs"

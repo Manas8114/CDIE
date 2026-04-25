@@ -1,0 +1,54 @@
+%% CDIE v5 — Online API RAG Flow
+%% Step-by-step query processing pipeline
+graph LR
+    subgraph Classify["Query Classification"]
+        B["Intent Parser<br/>classify_query()"] --> C1["intervention"]
+        B --> C2["counterfactual"]
+        B --> C3["root_cause"]
+        B --> C4["temporal"]
+    end
+
+    subgraph Phase1["Phase 1: Safety Map Lookup"]
+        D["Build query fingerprint"]
+        E["Query safety_map.db<br/>(SQLite, less than 0.3ms)"]
+        F{"Exact Match?"}
+        G["Return cached result<br/>+ Drift Check (KS Test)"]
+        H["Nearest-Neighbor Fallback<br/>Heuristic estimate"]
+        C1 --> D
+        C2 --> D
+        C3 --> D
+        C4 --> D
+        D --> E
+        E --> F
+        F -->|"Yes"| G
+        F -->|"No"| H
+    end
+
+    subgraph Phase2["Phase 2: RAG Intelligence Report"]
+        I["1. TEI Embedding<br/>BAAI/bge-base-en-v1.5<br/>768-dim vector"]
+        J["2. Cosine Retrieval<br/>Top-6 playbooks from<br/>telecom_playbooks.json"]
+        K["3. TEI Reranking<br/>BAAI/bge-reranker-base<br/>Cross-encoder precision"]
+        L["4. OPEA LLM TextGen<br/>Intel/neural-chat-7b-v3-3<br/>via TGI to /v1/chat/completions"]
+        M["5. Structured Report<br/>OPEA Causal Intelligence Report<br/>Markdown, 2-8s"]
+        A["User Query<br/>(Natural Language)"] --> I
+        I --> J --> K --> L --> M
+    end
+
+    subgraph Phase3["Phase 3: Fallback Chain"]
+        N["OpenAI API Fallback<br/>(if API key provided)"]
+        O["Rule-based Template<br/>Deterministic fallback"]
+        P["Return Full Response<br/>Causal Evidence +<br/>RAG Playbook Advice<br/>+ Prescriptive Rankings"]
+        L -->|"OPEA fails"| N
+        N -->|"OpenAI fails"| O
+        M --> P
+    end
+
+    H --> P
+    G --> P
+
+    style Classify fill:#e3f2fd
+    style Phase1 fill:#e8f5e9
+    style Phase2 fill:#fff3e0
+    style Phase3 fill:#ffebee
+    style A fill:#e040fb,color:#fff
+    style P fill:#4caf50,color:#fff

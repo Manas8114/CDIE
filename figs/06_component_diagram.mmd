@@ -1,0 +1,78 @@
+%% CDIE v5 — Component Diagram
+%% Module-level view with Python packages
+graph TB
+    subgraph Pipeline_Pkg["cdie/pipeline/ (Offline)"]
+        A1["data_generator.py<br/>SCM Simulation<br/>2000 rows, 12 nodes"]
+        A2["catl.py<br/>Causal Assumption<br/>Transparency Layer"]
+        A3["gfci_discovery.py<br/>GFCI Structure Learning<br/>+ PC Fallback"]
+        A4["pcmci_temporal.py<br/>PCMCI+ / Granger<br/>Temporal Discovery"]
+        A5["refutation.py<br/>DoWhy 3-Test Suite<br/>Placebo / Random / Subset"]
+        A6["estimation.py<br/>LinearDML + MAPIE<br/>ATE + Conformal CIs"]
+        A7["benchmarks.py<br/>SACHS + ALARM<br/>Ground Truth Evaluation"]
+        A8["safety_map.py<br/>SQLite Writer<br/>SHA-256 Integrity"]
+        A9["run_pipeline.py<br/>8-Step Orchestrator"]
+    end
+
+    subgraph API_Pkg["cdie/api/ (Online)"]
+        B1["main.py<br/>FastAPI Endpoints<br/>/query /prescribe /drift"]
+        B2["lookup.py<br/>Safety Map Reader<br/>&lt; 0.3ms SQLite"]
+        B3["intent_parser.py<br/>Query Classifier<br/>4 Intent Types"]
+        B4["rag.py<br/>OPEA RAG Engine<br/>Embed → Rerank → LLM"]
+        B5["drift.py<br/>KS-Staleness Analyzer<br/>Distribution Shift"]
+        B6["models.py<br/>Pydantic Schemas<br/>Request / Response"]
+    end
+
+    subgraph UI_Pkg["cdie/ui/ (Legacy)"]
+        C1["app.py<br/>Streamlit Interface<br/>Interactive Graph"]
+        C2["presentation.py<br/>Report Formatting"]
+    end
+
+    subgraph Frontend["frontend/ (Next.js)"]
+        D1["Dashboard.tsx<br/>Main Dashboard + Prescriptive Mode"]
+        D2["CausalGraph.tsx<br/>React Flow DAG Visualization"]
+    end
+
+    subgraph Data_Artifacts["data/ (Artifacts)"]
+        E1["safety_map.db<br/>SQLite Cache"]
+        E2["safety_map.json<br/>JSON Export"]
+        E3["scm_data.csv<br/>Synthetic Dataset"]
+        E4["ground_truth.pkl<br/>True DAG"]
+        E5["telecom_playbooks.json<br/>RAG Knowledge Base"]
+    end
+
+    D1 --> B1
+    D2 --> B1
+    C1 --> B1
+
+    B1 --> B2
+    B1 --> B3
+    B1 --> B4
+    B1 --> B5
+    B1 --> B6
+
+    B2 --> E1
+    B2 --> E2
+    B3 --> E5
+    B4 --> B3
+
+    A9 --> A1
+    A9 --> A2
+    A9 --> A3
+    A9 --> A4
+    A9 --> A5
+    A9 --> A6
+    A9 --> A7
+    A9 --> A8
+
+    A8 --> E1
+    A8 --> E2
+    A1 --> E3
+    A1 -.->|"generates"| E4
+
+    style Pipeline_Pkg fill:#fff3e0
+    style API_Pkg fill:#e3f2fd
+    style UI_Pkg fill:#fce4ec
+    style Frontend fill:#e8f5e9
+    style Data_Artifacts fill:#eceff1
+    style A9 fill:#ff9800,color:#fff
+    style B1 fill:#2196f3,color:#fff

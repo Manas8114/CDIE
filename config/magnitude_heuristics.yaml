@@ -1,0 +1,17 @@
+# CDIE v5 - Magnitude Heuristics Configuration
+# These heuristics are used when the Safety Map does not have a pre-computed scenario.
+
+fallback_heuristics:
+  # The base multiplier applied to the percentage magnitude to get a point estimate.
+  # Default: magnitude / 100 * 0.45
+  magnitude_to_ate_multiplier: 0.45
+  
+  # Default point estimate if no magnitude is provided.
+  default_point_estimate: 0.05
+  
+  # Default confidence interval bounds relative to point estimate.
+  ci_lower_multiplier: 0.65
+  ci_upper_multiplier: 1.35
+  
+  # Default intervention amount if none provided (as a ratio).
+  default_intervention_ratio: 0.1

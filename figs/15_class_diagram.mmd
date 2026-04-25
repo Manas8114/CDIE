@@ -1,0 +1,129 @@
+%% CDIE v5 — Class Diagram
+%% Python modules and key classes
+classDiagram
+    %% API Layer
+    class QueryRequest {
+        +str query
+        +str variable
+        +float magnitude
+        +str direction
+    }
+    class QueryResponse {
+        +float ate
+        +list ci
+        +str evidence_summary
+        +str opem_report
+        +float latency_ms
+    }
+    class HealthResponse {
+        +str status
+        +list services
+    }
+    class BenchmarkResponse {
+        +dict metrics
+    }
+
+    class SafetyMapLookup {
+        +query_safety_map(fingerprint)
+        +get_drift_status(variable)
+        +close()
+        sqlite3.Connection db
+    }
+    class ExplanationEngine {
+        +embed_query(query)
+        +retrieve_playbooks(query, top_k)
+        +generate_report(evidence)
+        +OPEA endpoint
+    }
+    class IntentParser {
+        +classify_query(query)
+        +suggest_variables(query)
+    }
+
+    %% Pipeline Layer
+    class DataGenerator {
+        +generate_scm_data()
+        +generate_ground_truth_dag()
+        VARIABLE_NAMES
+        GROUND_TRUTH_EDGES
+    }
+    class CATL {
+        +run_catl(data, variables)
+        +test_faithfulness()
+        +test_overlap()
+    }
+    class GFCIDiscovery {
+        +run_discovery()
+        +apply_gfci()
+        +add_priors()
+    }
+    class PCMCITemporal {
+        +run_temporal_discovery()
+        +granger_crossval()
+    }
+    class Refutation {
+        +run_refutation(dag, data)
+        +placebo_test()
+        +random_common_cause()
+        +subset_test()
+        +quarantine_edges()
+    }
+    class LinearDML {
+        +estimate_ate(data, edges)
+        +doubly_robust()
+    }
+    class MAPIE {
+        +conformal_intervals()
+        +95_percent_bands()
+    }
+    class SafetyMapBuilder {
+        +build_safety_map()
+        +save_sqlite()
+        hash: SHA256
+    }
+    class BenchmarkRunner {
+        +run_benchmarks()
+        +sachs_eval()
+        +alarm_eval()
+    }
+
+    %% Runtime
+    class RuntimePaths {
+        +get_runtime_paths()
+        +init_runtime_dir()
+    }
+
+    class DataStoreManager {
+        +save_artifact(name, data)
+        +load_artifact(name)
+    }
+
+    %% Relationships
+    QueryRequest <|-- QueryResponse : returns
+    SafetyMapLookup --> DataStoreManager : uses
+    ExplanationEngine --> SafetyMapLookup : queries
+    ExplanationEngine --> TEIClient : embed/rerank
+    IntentParser --> VARIABLE_NAMES : references
+    
+    DataStoreManager <|-- SafetyMapBuilder : extends
+    CATL --> DataStoreManager : logs
+    
+    GFCIDiscovery --> DataStoreManager : outputs
+    GFCIDiscovery --> CATL : prior
+    
+    PCMCITemporal --> GFCIDiscovery : complements
+    
+    Refutation --> GFCIDiscovery : validates
+    Refutation --> DataStoreManager : quarantines
+    
+    LinearDML --> Refutation : validated_edges
+    MAPIE --> LinearDML : wraps
+    
+    BenchmarkRunner --> GFCIDiscovery : evaluates
+    
+    SafetyMapBuilder --> LinearDML : ATE + CI
+    SafetyMapBuilder --> MAPIE : CI
+    SafetyMapBuilder --> Refutation : status
+    SafetyMapBuilder --> CATL : tests
+    SafetyMapBuilder --> PCMCITemporal : temporal
+    SafetyMapBuilder --> BenchmarkRunner : metrics

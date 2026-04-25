@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cdie-api
+  labels:
+    app: cdie-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cdie-api
+  template:
+    metadata:
+      labels:
+        app: cdie-api
+    spec:
+      containers:
+      - name: api
+        image: cdie-api:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: REDIS_URL
+          value: "redis://cdie-redis:6379/0"
+        - name: OPEA_LLM_ENDPOINT
+          value: "http://opea-textgen:9000"
+        - name: OPEA_EMBEDDING_ENDPOINT
+          value: "http://tei-embedding:80"
+        - name: OPEA_RERANKING_ENDPOINT
+          value: "http://tei-reranking:80"
+        - name: DNNL_MAX_CPU_ISA
+          value: "AVX512_CORE_AMX"
+        resources:
+          limits:
+            cpu: "2"
+            memory: "4Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cdie-api
+spec:
+  selector:
+    app: cdie-api
+  ports:
+  - protocol: TCP
+    port: 8000
+    targetPort: 8000

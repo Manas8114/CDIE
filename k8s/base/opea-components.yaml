@@ -1,0 +1,143 @@
+# TGI Service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tgi-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tgi-service
+  template:
+    metadata:
+      labels:
+        app: tgi-service
+    spec:
+      containers:
+      - name: tgi
+        image: ghcr.io/huggingface/text-generation-inference:2.4.0-intel-cpu
+        env:
+        - name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: cdie-secrets
+              key: hf-token
+        - name: DNNL_MAX_CPU_ISA
+          value: "AVX512_CORE_AMX"
+        args: ["--model-id", "Intel/neural-chat-7b-v3-3", "--max-input-length", "2048", "--max-total-tokens", "4096"]
+        ports:
+        - containerPort: 80
+        resources:
+          limits:
+            cpu: "4"
+            memory: "32Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tgi-service
+spec:
+  selector:
+    app: tgi-service
+  ports:
+  - port: 80
+---
+# OPEA TextGen
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: opea-textgen
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: opea-textgen
+  template:
+    metadata:
+      labels:
+        app: opea-textgen
+    spec:
+      containers:
+      - name: textgen
+        image: opea/llm-textgen:latest
+        env:
+        - name: LLM_ENDPOINT
+          value: "http://tgi-service:80"
+        - name: LLM_MODEL_ID
+          value: "Intel/neural-chat-7b-v3-3"
+        ports:
+        - containerPort: 9000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: opea-textgen
+spec:
+  selector:
+    app: opea-textgen
+  ports:
+  - port: 9000
+---
+# TEI Embedding
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tei-embedding
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tei-embedding
+  template:
+    metadata:
+      labels:
+        app: tei-embedding
+    spec:
+      containers:
+      - name: embedding
+        image: ghcr.io/huggingface/text-embeddings-inference:cpu-latest
+        args: ["--model-id", "BAAI/bge-base-en-v1.5"]
+        ports:
+        - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tei-embedding
+spec:
+  selector:
+    app: tei-embedding
+  ports:
+  - port: 80
+---
+# TEI Reranking
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tei-reranking
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tei-reranking
+  template:
+    metadata:
+      labels:
+        app: tei-reranking
+    spec:
+      containers:
+      - name: reranking
+        image: ghcr.io/huggingface/text-embeddings-inference:cpu-latest
+        args: ["--model-id", "BAAI/bge-reranker-base"]
+        ports:
+        - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tei-reranking
+spec:
+  selector:
+    app: tei-reranking
+  ports:
+  - port: 80

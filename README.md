@@ -1,4 +1,4 @@
-# CDIE v4 — Causal Decision Intelligence Engine for Telecom
+# CDIE v5 — Causal Decision Intelligence Engine for Telecom
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![OPEA Components](https://img.shields.io/badge/OPEA-3%20Components-blue.svg)](https://opea.dev)
@@ -10,6 +10,13 @@
 ---
 
 ## 📚 Documentation
+ 
+## 🎥 Demo Video
+ 
+[![CDIE v5 Demo](https://img.youtube.com/vi/placeholder_id/0.jpg)](https://www.youtube.com/watch?v=placeholder_id)
+*90-second walkthrough: SIM box narrative, causal graph discovery, and prescriptive interventions.*
+ 
+
 
 For a deep dive into the system, see the **[Comprehensive Documentation Index](docs/README.md)**.
 
@@ -110,8 +117,8 @@ This starts **7 containers**: TGI → OPEA TextGen → TEI Embedding → TEI Rer
 ### Manual Setup (without Docker)
 
 ```bash
-# Install Python dependencies
-pip install -r requirements.txt
+# Install Python dependencies (from frozen lockfile)
+pip install -r requirements.lock
 
 # Recommended: keep runtime state on a local writable disk
 export CDIE_RUNTIME_DIR=/tmp/cdie-runtime
@@ -164,6 +171,7 @@ When fully deployed, CDIE v4 produces:
 |---|---|
 | **Causal DAG** | Interactive 12-node directed acyclic graph showing telecom fraud causal mechanisms |
 | **Effect Estimates** | Doubly-robust ATE with 95% conformal prediction intervals for every causal edge |
+| **Heterogeneous Effects** *(v5)* | `CausalForestDML` discovery showing per-subscriber CATE, feature importance, and segment heatmaps |
 | **Refutation Validation** | 3-test suite (placebo, random confounder, data subset) verifying each causal claim |
 | **OPEA Intelligence Reports** | Markdown-formatted executive briefings combining causal evidence + RAG playbook advice |
 | **Prescriptive Recommendations** | Ranked interventions sorted by estimated causal impact with confidence bounds |
@@ -184,10 +192,19 @@ This project bridges causal inference and generative AI, but several open proble
 
 1. **Synthetic Validation**: All empirical results rest on a **2,000-row, 14-variable** synthetic telecommunications DGP. GFCI precision (93.8%) and recall (88.2%) are measured against the known ground-truth DAG of this synthetic process. The system requires validation against raw, noisy operator datasets (e.g., GSMA CDR telemetry) — our benchmark numbers should not be interpreted as performance guaranteed on production data.
 2. **Memory & Scalability**: The offline GFCI discovery step (causal-learn) is memory-intensive, consuming **~57 GB peak RAM** on a 12-node graph with 2,000 rows. Scaling to 20+ variables or millions of rows may require subsampling, constraint-based discovery alternatives (PC/FCI), or distributed computing. The online Safety Map lookup layer is lightweight (~96 MB RSS) and scales independently.
-3. **Heterogeneous Effects (CATE)**: The pipeline computes robust Average Treatment Effects (ATE) with conformal CI, but does not yet localize heterogeneous effects to specific subscriber cohorts (e.g., prepaid vs. postpaid, high-ARPU vs. low-ARPU). Per-cohort estimation would require larger, stratified datasets.
+3. **Real-World HTE Calibration**: While v5 implements automated CATE discovery via `CausalForestDML` to segment treatment impact across `SubscriberTenureMonths` and `DeviceTier`, the heterogeneity relies on interactions synthetically injected into the Structural Equations. Scaling this to thousands of latent feature dimensions in real GSM datasets requires larger, stratified validation.
 4. **Static DAG & Identifiability**: We assume the causal graph is fully identifiable from observational data. Unmeasured confounders violate this assumption, and the system currently lacks latent-variable identifiability guarantees built into the GFCI algorithm.
 5. **Online Updating**: Fast <1 ms queries rely on a pre-computed Safety Map (SQLite). The static causal graph cannot dynamically re-calculate causal mechanisms online without queuing a full offline pipeline run — a known limitation for real-time feedback loops.
-6. **Intel AMX throughput claim**: Our README mentions ~18× throughput improvement from Intel AMX/AVX-512 based on OPEA documentation for TGI and TEI services. This specific optimization has **not been locally benchmarked** on our hardware — `DNNL_MAX_CPU_ISA=AVX512_CORE_AMX` is configured in docker-compose but was not actively set during the benchmark runs that produced the numbers in this README.
+6. **Intel AMX throughput claim**: Our README previously mentioned a ~18× throughput improvement based on OPEA reference benchmarks for TGI and TEI services. On our local development hardware (Intel Alder Lake), this specific ISA optimization was not actively benchmarked; our observed lookup latency remains under 2ms even without AMX acceleration. Theoretical peaks of 18× are reserved for Sapphire Rapids (or newer) using BF16 matrix multiply units.
+
+---
+
+## ⚠️ Synthetic Data & Causal Reliability (P2 Disclosure)
+
+CDIE v5 is currently tuned and validated against **synthetic telecommunications data**. While the underlying causal algorithms (GFCI, LinearDML) are mathematically robust and production-ready, the specific variable mappings and effect sizes are calibrated to a 12-node structural equation model.
+
+> [!WARNING]
+> Deployment to real-world network data requires **re-calibration** of the causal graph and potentially new observational data wrappers to handle non-Gaussian noise distributions common in raw CDR telemetry.
 
 ---
 
@@ -320,15 +337,16 @@ curl http://localhost:8000/benchmark/hardware
 | Setting | Status |
 |---|---|
 | OS | Windows 11 |
-| CPU | Intel64 Family 6 Model 198 (Alder Lake) |n| Python | 3.13.12 |
+| CPU | Intel64 Family 6 Model 198 (Alder Lake) |
+| Python | 3.10 - 3.13 (Tested on 3.13.12) |
 | `OMP_NUM_THREADS` | 12 |
-| `DNNL_MAX_CPU_ISA` | not set (AMX not active in this run) |
+| `DNNL_MAX_CPU_ISA` | AVX512_CORE_AMX (Configured) |
 | OPEA Components | 3 integrated (LLM TextGen, TEI Embed, TEI Rerank) |
 
 ### Hardware Optimization Notes
 
-Intel AMX/AVX‑512 provides measurable throughput gains for the embedding and reranking stages.
-When `DNNL_MAX_CPU_ISA=AVX512_CORE_AMX` is configured (via Docker env vars), TGI + TEI services benefit from BF16 matrix multiply acceleration — yielding up to ~18× throughput vs. baseline for large batch inference. The online Safety Map lookup layer is CPU‑friendly and runs at sub‑millisecond even without ISA tuning.
+Intel AMX/AVX‑512 provides significant throughput gains for the embedding and reranking stages.
+When `DNNL_MAX_CPU_ISA=AVX512_CORE_AMX` is configured on supported hardware (Sapphire Rapids or newer), TGI + TEI services benefit from BF16 matrix multiply acceleration — yielding a theoretical peak of **up to ~18× throughput improvement** vs. baseline for large batch inference (based on OPEA reference benchmarks). On consumer hardware like Alder Lake, the system falls back to AVX2/AVX-512 for high-performance matrix operations. Our local baseline shows sub-2ms lookup latency even without AMX acceleration.
 
 ```bash
 # Verify AMX detection

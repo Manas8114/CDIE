@@ -1,0 +1,48 @@
+%% CDIE v5 — Sequence Diagram (Query to Intelligence Report)
+%% Full lifecycle of a user query through the system
+sequenceDiagram
+    participant User as "User"
+    participant NextJS as "Next.js UI (Port 3000)"
+    participant API as "FastAPI Backend (Port 8000)"
+    participant Intent as "Intent Parser"
+    participant Lookup as "Safety Map Lookup"
+    participant SQLite as "SQLite safety_map.db"
+    participant Embed as "TEI Embedding (Port 6006)"
+    participant Rerank as "TEI Reranking (Port 8808)"
+    participant OPEA as "OPEA LLM (Port 9000)"
+    participant TGI as "TGI Backend (Port 8008)"
+    participant Playbooks as "telecom_playbooks.json"
+
+    User->>NextJS: "What happens if SIM box fraud increases by 30%?"
+    NextJS->>API: POST /query {query, magnitude, variable}
+    
+    API->>Intent: classify_query(query)
+    Intent-->>API: {intent: "intervention", variable: "SIMBoxFraudAttempts", direction: "+"}
+    
+    Note over API: Phase 1: Safety Map Lookup (fast path)
+    API->>Lookup: Query Safety Map
+    Lookup->>SQLite: "SELECT * FROM scenarios WHERE variable = ? AND direction = ?"
+    SQLite-->>Lookup: "{ate, ci, confidence, scenario_hash}"
+    Lookup-->>API: "{result, latency: 0.29ms}"
+    
+    Note over API: Phase 2: RAG Intelligence Report
+    API->>API: Build evidence payload
+    
+    API->>Embed: Embed(query) to 768-dim vector
+    Embed-->>API: "embedding[768]"
+    
+    API->>API: Cosine similarity vs playbook embeddings
+    API->>Playbooks: Retrieve top-6 playbooks
+    Playbooks-->>API: "top_6_playbooks"
+    
+    API->>Rerank: Rerank(query, top_6_playbooks)
+    Rerank-->>API: "reranked_scores"
+    
+    API->>OPEA: "POST /v1/chat/completions prompt = evidence + playbooks"
+    OPEA->>TGI: Forward to TGI runtime
+    TGI-->>OPEA: "LLM generated text"
+    OPEA-->>API: Markdown report (2-8s)
+    
+    API-->>API: Assemble full response {safety_map_result, rag_report, prescriptive_rankings}
+    API-->>NextJS: "{query_response, evidence, report, latency}"
+    NextJS-->>User: Render Dashboard + Markdown Report

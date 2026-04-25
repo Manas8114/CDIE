@@ -1,0 +1,23 @@
+# CDIE v5 - CATE Segment Configuration
+# Adjust these multipliers based on historical business knowledge.
+# These are used when exact causal estimation is missing for a segment.
+
+segments:
+  Consumer:
+    ate_multiplier: 1.3
+    ci_lower_multiplier: 0.9
+    ci_upper_multiplier: 1.7
+    n_samples_default: 3500
+    risk_level: "Low"
+  Enterprise:
+    ate_multiplier: 0.85
+    ci_lower_multiplier: 0.5
+    ci_upper_multiplier: 1.2
+    n_samples_default: 1200
+    risk_level: "Low"
+  MVNO:
+    ate_multiplier: 0.7
+    ci_lower_multiplier: 0.4
+    ci_upper_multiplier: 1.1
+    n_samples_default: 800
+    risk_level: "Medium"

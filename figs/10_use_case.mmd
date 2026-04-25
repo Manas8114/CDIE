@@ -1,0 +1,48 @@
+%% CDIE v5 — Use Case Diagram
+%% Actors and their interactions with the system
+graph TB
+    subgraph Actors["Actors"]
+        CNO["CNO / Revenue Assurance Manager"]
+        NOC["NOC Operator"]
+        EXPERT["Domain Expert"]
+        ADMIN["System Administrator"]
+    end
+
+    subgraph UseCases["CDIE System Use Cases"]
+        UC1["Query Causal Interventions<br/>What if X changes?"]
+        UC2["View Causal DAG and Evidence"]
+        UC3["Generate Intelligence Report (RAG)"]
+        UC4["Correct Causal Edges (HITL)"]
+        UC5["Prescriptive Recommendations"]
+        UC6["Drift Monitoring and Alerts"]
+        UC7["Run Offline Pipeline"]
+        UC8["Configure OPEA Endpoints"]
+    end
+
+    CNO --> UC1
+    CNO --> UC3
+    CNO --> UC5
+    NOC --> UC2
+    NOC --> UC6
+    NOC --> UC1
+    EXPERT --> UC4
+    EXPERT --> UC2
+    ADMIN --> UC7
+    ADMIN --> UC8
+    ADMIN --> UC6
+
+    UC1 --> V1["FastAPI Query Engine"]
+    UC2 --> V2["React Flow Visualization"]
+    UC3 --> V3["OPEA RAG Pipeline"]
+    UC4 --> V4["SQLite Safety Map"]
+    UC5 --> V5["LinearDML Effect Estimates"]
+    UC6 --> V6["KS-Staleness Detector"]
+    UC7 --> V7["GFCI and DoWhy Pipeline"]
+    UC8 --> V8["Config Management"]
+
+    style Actors fill:#e3f2fd
+    style UseCases fill:#fff3e0
+    style CNO fill:#4caf50,color:#fff
+    style NOC fill:#2196f3,color:#fff
+    style EXPERT fill:#ff9800,color:#fff
+    style ADMIN fill:#9c27b0,color:#fff

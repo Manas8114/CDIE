@@ -1,0 +1,59 @@
+%% CDIE v5 — Network Diagram
+%% Deployment topology and traffic flow
+graph TB
+    subgraph Internet["🌐 Internet"]
+        USER1["👤 User Browser<br/>(Next.js)"]
+        EXTERNAL["🔌 External APIs<br/>(OpenAI fallback)"]
+        HF["📦 HuggingFace Hub<br/>(Model Download)"]
+    end
+
+    subgraph LocalHost["Local Machine (127.0.0.1)"]
+        subgraph Frontend["Frontend"]
+            NEXTJS["Next.js<br/>http://127.0.0.1:3000"]
+            STREAM["Streamlit<br/>http://127.0.0.1:8501"]
+        end
+
+        subgraph Backend["Backend"]
+            API["FastAPI<br/>http://127.0.0.1:8000"]
+            API_HEALTH["Health: /health"]
+            API_INFO["Info: /info"]
+        end
+
+        subgraph OPEA["OPEA GenAIComps"]
+            TGI["TGI Service<br/>http://127.0.0.1:8008"]
+            LLMSVC["LLM TextGen<br/>http://127.0.0.1:9000"]
+            TEI["TEI Embedding<br/>http://127.0.0.1:6006"]
+            RERANK["TEI Reranking<br/>http://127.0.0.1:8808"]
+        end
+    end
+
+    subgraph DockerNet["Docker Bridge Network<br/>(cdie-network)"]
+        subgraph IntServices["Internal Endpoints"]
+            TGI_INT["TGI:80"]
+            TEI_INT["TEI:80"]
+            RERANK_INT["Rerank:80"]
+        end
+    end
+
+    USER1 --> NEXTJS
+    NEXTJS --> API
+    STREAM --> API
+
+    API --> LLMSVC
+    LLMSVC --> TGI_INT
+    API --> TEI_INT
+    API --> RERANK_INT
+
+    TGI --> HF
+    TEI --> HF
+    RERANK --> HF
+
+    API -.->|Optional| EXTERNAL
+    API_HEALTH -.->|30s| API
+
+    style Internet fill:#f5f5f5
+    style LocalHost fill:#fff3e0
+    style DockerNet fill:#e3f2fd
+    style USER1 fill:#4caf50,color:#fff
+    style HF fill:#ff9800,color:#fff
+    style EXTERNAL fill:#9c27b0,color:#fff

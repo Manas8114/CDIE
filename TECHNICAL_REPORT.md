@@ -1,4 +1,4 @@
-# CDIE v4 — Technical Report
+# CDIE v5 — Technical Report
 
 ## Causal Decision Intelligence Engine for Telecom SIM Box Fraud Detection
 
@@ -35,7 +35,8 @@ A **12-node Structural Causal Model (SCM)** simulates telecom billing fraud dyna
 5. **DoWhy Refutation**: 3-test suite — placebo treatment, random common cause, data subset — verifying each causal claim
 6. **LinearDML Estimation**: Doubly-robust Average Treatment Effect (ATE) estimation via EconML, remaining valid when either the outcome model or treatment model is misspecified
 7. **MAPIE Confidence Intervals**: Distribution-free 95% conformal prediction intervals for every effect estimate
-8. **Benchmark Validation**: Tested against SACHS (11-node protein signaling) and ALARM (37-node medical diagnosis) ground-truth networks, reporting Precision, Recall, F1, and Structural Hamming Distance (SHD)
+8. **HTE / CATE Discovery** *(v5 new)*: `CausalForestDML` (with `ForestDRLearner` fallback) from EconML automatically discovers subscriber-level treatment effect heterogeneity across `SubscriberTenureMonths`, `DeviceTier`, and `RegionalRiskScore`. The module outputs per-subscriber CATE estimates, feature importance rankings, and "high-effect" vs "low-effect" subscriber profiles without requiring manual cohort specification.
+9. **Benchmark Validation**: Tested against SACHS (11-node protein signaling) and ALARM (37-node medical diagnosis) ground-truth networks, reporting Precision, Recall, F1, and Structural Hamming Distance (SHD)
 
 Results are persisted to a **SQLite Safety Map** with SHA-256 integrity hashing and KS-test staleness detection for production reliability.
 
@@ -99,21 +100,27 @@ CDIE directly addresses the challenge's **Telecommunication Networks** vertical:
 1. **Hybrid Causal AI + RAG**: First system combining doubly-robust causal estimation with OPEA GenAI retrieval-augmented generation
 2. **Refutation-Validated Claims**: Every causal effect passes 3 independent refutation tests before being reported
 3. **Conformal Prediction**: Distribution-free 95% confidence intervals via MAPIE — no Gaussian assumptions
-4. **Human-in-the-Loop**: Interactive causal graph with expert edge rejection for assumption refinement
-5. **Academic Benchmarking**: Validated against SACHS and ALARM ground-truth networks (F1, SHD metrics)
-6. **Intel-Optimized**: AMX/AVX-512 acceleration with measurable throughput benchmarks
-7. **Graceful Degradation**: 3-tier LLM fallback (OPEA → OpenAI → Templates) ensures availability
+4. **Subscriber-Level HTE** *(v5)*: `CausalForestDML` identifies which subscriber cohorts (by tenure, device tier, regional risk) respond most to fraud-policy interventions — enabling precision targeting rather than blanket policy changes
+5. **Human-in-the-Loop**: Interactive causal graph with expert edge rejection for assumption refinement
+6. **Academic Benchmarking**: Validated against SACHS and ALARM ground-truth networks (F1, SHD metrics)
+7. **Intel-Optimized**: AMX/AVX-512 acceleration with measurable throughput benchmarks
+8. **Graceful Degradation**: 3-tier LLM fallback (OPEA → OpenAI → Templates) ensures availability
 
 ---
 
 ### 7. Limitations & Open Challenges
 
-This project represents a prototype bridging causal AI and generative LLMs. Several key technical challenges remain unsolved before deployment at a Tier-1 MNO:
+This project represents a prototype bridging causal AI and generative LLMs. Several key technical challenges remain before deployment at a Tier-1 MNO:
 
 1. **Synthetic Data Dependency**: Current metrics (F1, SHD) and causal impact confidence intervals are derived from our own synthetic 12-node Data Generating Process. To prove real-world viability, the pipeline must be validated against noisy, production GSM/CDMA datasets (e.g., GSMA Fraud Intelligence).
-2. **Heterogeneous Treatment Effects (CATE)**: While the system correctly estimates the Average Treatment Effect (ATE), it lacks CATE estimation. We cannot currently isolate whether tightening a fraud policy affects prepaid subscribers differently than postpaid enterprise clients.
-3. **Online DAG Updates**: The system achieves fast online queries by caching a static "Safety Map." If real-world causal mechanisms drift, the DAG cannot be updated online without re-running the entire batch offline pipeline.
-4. **Causal Identifiability Risks**: We assume the 12-node SCM fully satisfies ignorability. In live telecom networks, unmeasured latent confounders that violate these bounds will void our current causal identifiability guarantees.
+2. **Online DAG Updates**: The system achieves fast online queries by caching a static "Safety Map." If real-world causal mechanisms drift, the DAG cannot be updated online without re-running the entire batch offline pipeline.
+3. **Causal Identifiability Risks**: We assume the 12-node SCM fully satisfies ignorability. In live telecom networks, unmeasured latent confounders that violate these bounds will void our current causal identifiability guarantees.
+
+#### 7.1 Roadmap (v6)
+
+- **Real CDR Validation**: Partnership with anonymized operator data for live GSM/CDMA noise testing.
+- **Federated Causal Learning**: Privacy-preserving causal discovery across multiple MNO data silos.
+- **Online DAG Refresh**: KS-test drift triggers an incremental GFCI re-run without full pipeline restart.
 
 ---
 

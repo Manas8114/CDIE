@@ -48,7 +48,7 @@ services:
     image: opea/llm-textgen:latest
     container_name: rename-opea-textgen
     ports:
-      - "9000:9000"
+      - "8888:9000"  # host:container — internal port is 9000
     environment:
       - LLM_ENDPOINT=http://tgi-service:80
       - LLM_MODEL_ID=Intel/neural-chat-7b-v3-3
@@ -64,6 +64,12 @@ services:
         limits:
           cpus: '2'
           memory: 4G
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/v1/health_check || curl -f http://localhost:9000/health || curl -f http://localhost:9000/v1/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
     networks:
       - cdie-network
     restart: unless-stopped
@@ -174,6 +180,11 @@ services:
       - OPEA_RERANKING_ENDPOINT=http://tei-reranking:80
       - LLM_MODEL_ID=Intel/neural-chat-7b-v3-3
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - REDIS_URL=redis://redis:6379/0
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:8501}
+      - RATE_LIMIT=${RATE_LIMIT:-100/minute}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - CDIE_ENABLE_METRICS=1
       # Intel AMX/AVX-512 Hardware Optimization
       - DNNL_MAX_CPU_ISA=AVX512_CORE_AMX
       - KMP_AFFINITY=fine,compact,1,0
@@ -185,14 +196,20 @@ services:
           cpus: '2'
           memory: 4G
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      test: ["CMD-SHELL", "python scripts/health_probe.py --url http://localhost:8000/health || exit 1"]
       interval: 30s
-      timeout: 5s
+      timeout: 10s
       retries: 3
       start_period: 60s
+    depends_on:
+      redis:
+        condition: service_started
+      opea-llm-textgen:
+        condition: service_healthy
     networks:
       - cdie-network
     restart: unless-stopped
+
 
   # ═══════════════════════════════════════════════════════════════
   # CDIE Streamlit UI (Legacy — use Next.js frontend for production)
@@ -244,6 +261,18 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    restart: unless-stopped
+
+  # ═══════════════════════════════════════════════════════════════
+  # Redis Cache (Causal & RAG Response Caching)
+  # ═══════════════════════════════════════════════════════════════
+  redis:
+    image: redis:7.2-alpine
+    container_name: rename-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - cdie-network
     restart: unless-stopped
 
 volumes:

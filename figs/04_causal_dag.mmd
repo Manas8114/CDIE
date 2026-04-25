@@ -1,0 +1,46 @@
+%% CDIE v5 — 12-Node Causal DAG (Ground Truth)
+%% Telecom SIM Box Fraud Structural Causal Model
+graph TB
+    RS["RegulatorySignal"]
+    ITU["ITURegulatoryPressure"]
+    FPS["FraudPolicyStrictness"]
+    CDR["CallDataRecordVolume"]
+    SIM["SIMBoxFraudAttempts"]
+    DET["SIMFraudDetectionRate"]
+    REV["RevenueLeakageVolume"]
+    RET["SubscriberRetentionScore"]
+    ARPU["ARPUImpact"]
+    NET["NetworkLoad"]
+    OPEX["NetworkOpExCost"]
+    CASH["CashFlowRisk"]
+
+    RS --> ITU
+    RS --> RET
+    ITU --> FPS
+    CDR --> SIM
+    CDR --> NET
+    CDR --> ARPU
+    SIM --> DET
+    SIM --> REV
+    FPS --> DET
+    FPS --> OPEX
+    DET --> REV
+    DET --> RET
+    REV --> ARPU
+    REV --> CASH
+    RET --> ARPU
+    NET --> OPEX
+    OPEX --> CASH
+
+    style RS fill:#e3f2fd
+    style ITU fill:#bbdefb
+    style FPS fill:#90caf9
+    style CDR fill:#e8f5e9
+    style SIM fill:#c8e6c9
+    style DET fill:#a5d6a7
+    style REV fill:#fff3e0
+    style RET fill:#ffe0b2
+    style ARPU fill:#ffcc80
+    style NET fill:#f3e5f5
+    style OPEX fill:#e1bee7
+    style CASH fill:#ce93d8

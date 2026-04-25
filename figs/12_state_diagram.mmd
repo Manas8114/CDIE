@@ -1,0 +1,43 @@
+%% CDIE v5 — State Diagram
+%% Online Query State Machine (User Query Processing)
+stateDiagram-v2
+    [*] --> Idle
+
+    state "User Action" as UA
+    state "Process Query" as PQ
+    state "Safety Map Lookup" as SL
+    state "Drift Check" as DC
+    state "RAG Generate Report" as RG
+    state "Fallback Chain" as FC
+    state "Return Response" as RR
+    state "Rule Template" as RTemplate
+
+    Idle --> UA: Query received
+    UA --> PQ: classify_query()
+    PQ --> SL: Exact match?
+    PQ --> RG: No match
+    SL --> DC: Check KS-Staleness
+    DC --> SL: Cache valid
+    DC --> RG: Cache drifted
+    RG --> RR: OPEA success
+    RG --> FC: OPEA fails
+    FC --> RR: OpenAI succeed
+    FC --> RTemplate: OpenAI fails
+    RTemplate --> RR
+    RR --> Idle: Complete
+
+    note right of SL
+        less than 0.3ms
+        SQLite read
+    end note
+
+    note right of RG
+        2 to 8s
+        TGI plus TEI
+    end note
+
+    note right of DC
+        KS test on
+        historical
+        distribution
+    end note

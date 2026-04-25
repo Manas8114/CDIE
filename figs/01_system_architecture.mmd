@@ -1,0 +1,66 @@
+%% CDIE v5 — System Architecture Diagram
+%% Render at: https://mermaid.live
+graph TB
+    subgraph OPEA_GenAIComps["OPEA GenAIComps Layer (3 Microservices)"]
+        TGI["TGI Backend<br/>Intel/neural-chat-7b-v3-3"]
+        OPEA_LLM["OPEA TextGen Microservice<br/>OpenAI-compatible /v1/chat/completions"]
+        TEI_EMB["TEI Embedding<br/>BAAI/bge-base-en-v1.5 (768d)"]
+        TEI_RNK["TEI Reranking<br/>BAAI/bge-reranker-base"]
+        TGI --> OPEA_LLM
+    end
+
+    subgraph CDIE_Engine["CDIE v5 Engine"]
+        subgraph Offline["OFFLINE PIPELINE (Batch)"]
+            SCM["SCM DataGen<br/>(12-node DAG, 2000 rows)"]
+            CATL["CATL<br/>Causal Assumption Testing"]
+            GFCI["GFCI Discovery<br/>Causal Structure Learning"]
+            PCMCI["PCMCI+ / Granger<br/>Temporal Causality"]
+            DOWHY["DoWhy Refutation<br/>3-Test Validation Suite"]
+            LINEAR["LinearDML<br/>Doubly-Robust Effect Estimation"]
+            MAPIE["MAPIE<br/>95% Conformal Prediction Intervals"]
+            BENCH["Benchmarks<br/>SACHS + ALARM Evaluation"]
+            SAFETY["Safety Map<br/>SQLite + SHA-256 Artifact"]
+            SCM --> CATL --> GFCI --> DOWHY --> LINEAR --> MAPIE --> SAFETY
+            GFCI --> PCMCI --> DOWHY
+            LINEAR --> BENCH --> SAFETY
+        end
+
+        subgraph Online["ONLINE API (FastAPI)"]
+            QUERY_USER["User Query<br/>Natural Language"]
+            INTENT["Intent Parser<br/>classify_query"]
+            MAP_LOOKUP["Safety Map Lookup<br/>&lt; 0.3ms"]
+            DRIFT["Drift Analyzer<br/>KS-Staleness Detection"]
+            RAG["RAG Engine<br/>Embed to Retrieve to Rerank to Generate"]
+            HITL["HITL Edge Rejection<br/>Expert Correction"]
+            QUERY_USER --> INTENT
+            INTENT --> MAP_LOOKUP
+            INTENT --> RAG
+            MAP_LOOKUP --> HITL
+        end
+    end
+
+    subgraph Frontends["Frontends"]
+        NEXTJS["Next.js + React Flow<br/>Production Dashboard<br/>Port 3000"]
+        STREAMLIT["Streamlit<br/>Legacy UI<br/>Port 8501"]
+    end
+
+    OPEA_LLM --> RAG
+    TEI_EMB --> RAG
+    TEI_RNK --> RAG
+    SAFETY --> MAP_LOOKUP
+    SAFETY --> RAG
+    NEXTJS --> Online
+    STREAMLIT --> Online
+    HITL --> Offline
+
+    style OPEA_GenAIComps fill:#e3f2fd
+    style CDIE_Engine fill:#fff3e0
+    style Offline fill:#ffe0b2
+    style Online fill:#ffe0b2
+    style Frontends fill:#e8f5e9
+    style TGI fill:#bbdefb
+    style OPEA_LLM fill:#bbdefb
+    style TEI_EMB fill:#90caf9
+    style TEI_RNK fill:#90caf9
+    style NEXTJS fill:#a5d6a7
+    style STREAMLIT fill:#a5d6a7

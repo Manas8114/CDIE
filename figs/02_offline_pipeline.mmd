@@ -1,0 +1,80 @@
+%% CDIE v5 — Offline Pipeline Data Flow
+%% Shows the 8-step causal discovery pipeline
+graph LR
+    subgraph Step1["Step 1: Data Generation"]
+        A["Generate Ground Truth DAG"]
+        B["SCM Data Simulation<br/>2000 samples x 14 variables"]
+        C["Preprocess + Impute<br/>+ Winsorize + ADF Stationarity"]
+        A --> B --> C
+    end
+
+    subgraph Step2["Step 2: CATL Testing"]
+        D["Causal Assumption<br/>Transparency Layer<br/>Faithfulness, Sufficiency,<br/>Positivity, Overlap"]
+    end
+
+    subgraph Step3["Step 3: Discovery"]
+        E["GFCI Discovery<br/>Greedy Fast Causal Inference<br/>+ Latent Confounder Handling"]
+        F["Dynamic PRIORS<br/>(Optional OPEA Extraction)"]
+        F --> E
+    end
+
+    subgraph Step4["Step 4: Temporal"]
+        G["PCMCI+ Temporal Analysis"]
+        H["Granger Causality<br/>Cross-Validation"]
+        E --> G
+        G --> H
+    end
+
+    subgraph Step5["Step 5: Refutation"]
+        I["DoWhy 3-Test Refutation<br/>Placebo Treatment"]
+        J["Random Common Cause"]
+        K["Data Subset"]
+        E --> I
+        I --> J --> K
+
+        L{"All Edges Pass?"}
+        K --> L
+        M["Validated Edges OK"]
+        N["Quarantined Edges FAIL"]
+        L -->|"Pass"| M
+        L -->|"Fail"| N
+    end
+
+    subgraph Step6["Step 6: Estimation"]
+        O["LinearDML<br/>Doubly-Robust ATE"]
+        P["MAPIE<br/>95% Conformal CIs"]
+        M --> O --> P
+    end
+
+    subgraph Step7["Step 7: Benchmark"]
+        Q["SACHS Evaluation<br/>11-Node Protein Signaling"]
+        R["ALARM Evaluation<br/>37-Node Medical Diagnosis"]
+        S["Precision / Recall / F1 / SHD"]
+        O --> Q --> S
+        O --> R --> S
+    end
+
+    subgraph Step8["Step 8: Safety Map"]
+        T["Build Safety Map<br/>Aggregate All Artifacts"]
+        U["Save SQLite + JSON<br/>+ SHA-256 Digest"]
+        T --> U
+        P --> T
+        N --> T
+        H --> T
+        S --> T
+    end
+
+    C --> D --> E
+    U --> V["safety_map.db<br/>(776 KB)"]
+    U --> W["safety_map.json<br/>(806 KB)"]
+
+    style Step1 fill:#e3f2fd
+    style Step2 fill:#e8f5e9
+    style Step3 fill:#fff3e0
+    style Step4 fill:#f3e5f5
+    style Step5 fill:#ffebee
+    style Step6 fill:#e0f7fa
+    style Step7 fill:#fce4ec
+    style Step8 fill:#eceff1
+    style V fill:#4caf50,color:#fff
+    style W fill:#4caf50,color:#fff

@@ -1,0 +1,149 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 720" width="900" height="720">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f172a"/>
+      <stop offset="100%" style="stop-color:#1e293b"/>
+    </linearGradient>
+    <linearGradient id="headerGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#3b82f6"/>
+      <stop offset="100%" style="stop-color:#8b5cf6"/>
+    </linearGradient>
+    <filter id="shadow" x="-5%" y="-5%" width="115%" height="115%">
+      <feDropShadow dx="2" dy="4" stdDeviation="4" flood-color="#000000" flood-opacity="0.4"/>
+    </filter>
+    <filter id="glow" x="-10%" y="-10%" width="130%" height="130%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+    <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#94a3b8"/>
+    </marker>
+    <marker id="arrowhead-blue" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#60a5fa"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="720" rx="16" fill="url(#bg)"/>
+  
+  <!-- Title bar -->
+  <rect x="30" y="20" width="840" height="52" rx="10" fill="url(#headerGrad)" filter="url(#shadow)"/>
+  <text x="450" y="52" text-anchor="middle" fill="white" font-size="22" font-weight="bold" font-family="system-ui,sans-serif">CDIE v5 — Causal Decision Intelligence Engine Architecture</text>
+
+  <!-- SECTION 1: OFFLINE PIPELINE -->
+  <rect x="30" y="90" width="420" height="380" rx="14" fill="#1a1a2e" stroke="#3b82f6" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="30" y="90" width="420" height="36" rx="14" fill="#3b82f6" opacity="0.15"/>
+  <text x="240" y="113" text-anchor="middle" fill="#60a5fa" font-size="14" font-weight="bold" font-family="system-ui,sans-serif">🔧 OFFLINE PIPELINE</text>
+
+  <!-- Step 1: Data -->
+  <rect x="50" y="140" width="380" height="50" rx="8" fill="#1e293b" stroke="#475569" stroke-width="1"/>
+  <text x="65" y="162" fill="#e2e8f0" font-size="12" font-weight="bold" font-family="system-ui,sans-serif">Data Generation / Ingestion</text>
+  <text x="210" y="178" fill="#94a3b8" font-size="10" font-family="monospace">2,000 rows × 14 var SCM · 424 KB CSV</text>
+
+  <line x1="240" y1="190" x2="240" y2="210" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- Step 2: CATL -->
+  <rect x="50" y="210" width="380" height="50" rx="8" fill="#1e293b" stroke="#475569" stroke-width="1"/>
+  <text x="65" y="232" fill="#e2e8f0" font-size="12" font-weight="bold" font-family="system-ui,sans-serif">CATL — Causal Assumption Testing</text>
+  <text x="210" y="248" fill="#94a3b8" font-size="10" font-family="monospace">Positivity · Faithfulness · Sufficiency · Acyclicity</text>
+
+  <line x1="240" y1="260" x2="240" y2="280" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- Step 3: GFCI -->
+  <rect x="50" y="280" width="380" height="50" rx="8" fill="#1e293b" stroke="#f59e0b" stroke-width="1.5"/>
+  <text x="65" y="302" fill="#e2e8f0" font-size="12" font-weight="bold" font-family="system-ui,sans-serif">GFCI Causal Discovery + Granger</text>
+  <text x="210" y="318" fill="#94a3b8" font-size="10" font-family="monospace">12 nodes → 16 edges · F1: 90.9%</text>
+
+  <line x1="240" y1="330" x2="240" y2="350" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- Step 4: DoWhy -->
+  <rect x="50" y="350" width="380" height="50" rx="8" fill="#1e293b" stroke="#10b981" stroke-width="1.5"/>
+  <text x="65" y="372" fill="#e2e8f0" font-size="12" font-weight="bold" font-family="system-ui,sans-serif">DoWhy Refutation Suite (3 tests)</text>
+  <text x="210" y="388" fill="#94a3b8" font-size="10" font-family="monospace">Placebo · Confounder · Subset · Pass: 93.8%</text>
+
+  <line x1="240" y1="400" x2="240" y2="420" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- Step 5: Estimation -->
+  <rect x="50" y="420" width="185" height="40" rx="8" fill="#1e293b" stroke="#8b5cf6" stroke-width="1.5"/>
+  <text x="62" y="436" fill="#e2e8f0" font-size="11" font-weight="bold" font-family="system-ui,sans-serif">LinearDML (EconML)</text>
+  <text x="142" y="450" fill="#94a3b8" font-size="9" font-family="monospace">ATE + 95% CI</text>
+
+  <rect x="244" y="420" width="186" height="40" rx="8" fill="#1e293b" stroke="#ec4899" stroke-width="1.5"/>
+  <text x="256" y="436" fill="#e2e8f0" font-size="11" font-weight="bold" font-family="system-ui,sans-serif">MAPIE Conformal</text>
+  <text x="336" y="450" fill="#94a3b8" font-size="9" font-family="monospace">Distribution-free CI</text>
+
+  <!-- SECTION 2: SAFETY MAP -->
+  <rect x="30" y="490" width="420" height="80" rx="14" fill="#0f172a" stroke="#f59e0b" stroke-width="2" filter="url(#glow)"/>
+  <text x="240" y="518" text-anchor="middle" fill="#fbbf24" font-size="16" font-weight="bold" font-family="system-ui,sans-serif">⚡ Safety Map (Pre-computed)</text>
+  <text x="240" y="536" text-anchor="middle" fill="#94a3b8" font-size="11" font-family="monospace">776 KB SQLite · 806 KB JSON · 640 scenarios · &lt;0.5ms lookup</text>
+  <text x="240" y="556" text-anchor="middle" fill="#94a3b8" font-size="10" font-family="monospace">96 MB RSS online · O(log n) query</text>
+
+  <!-- SECTION 3: ONLINE API -->
+  <rect x="470" y="90" width="400" height="300" rx="14" fill="#1a1a2e" stroke="#8b5cf6" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="470" y="90" width="400" height="36" rx="14" fill="#8b5cf6" opacity="0.15"/>
+  <text x="670" y="113" text-anchor="middle" fill="#a78bfa" font-size="14" font-weight="bold" font-family="system-ui,sans-serif">🌐 ONLINE API (FastAPI)</text>
+
+  <!-- API box -->
+  <rect x="490" y="140" width="360" height="70" rx="8" fill="#1e293b" stroke="#8b5cf6" stroke-width="1.5"/>
+  <text x="505" y="162" fill="#e2e8f0" font-size="12" font-weight="bold" font-family="system-ui,sans-serif">Query Endpoint</text>
+  <text x="505" y="178" fill="#94a3b8" font-size="10" font-family="monospace">Intent parser → Safety Map lookup → Evidence retrieval</text>
+  <text x="505" y="193" fill="#94a3b8" font-size="10" font-family="monospace">Latency: 0.49ms mean · 96 MB RSS</text>
+
+  <!-- Arrow from Safety Map to API -->
+  <path d="M 450 530 L 490 530 L 490 175" stroke="#60a5fa" stroke-width="2.5" fill="none" marker-end="url(#arrowhead-blue)"/>
+  <text x="470" y="526" fill="#60a5fa" font-size="10" font-family="system-ui,sans-serif">Query</text>
+
+  <!-- SECTION 4: OPEA LAYER -->
+  <rect x="470" y="410" width="400" height="260" rx="14" fill="#1a1a2e" stroke="#10b981" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="470" y="410" width="400" height="36" rx="14" fill="#10b981" opacity="0.15"/>
+  <text x="670" y="433" text-anchor="middle" fill="#34d399" font-size="14" font-weight="bold" font-family="system-ui,sans-serif">🤖 OPEA GenAI Layer (3 Components)</text>
+
+  <!-- OPEA Component 1 -->
+  <rect x="490" y="460" width="360" height="55" rx="8" fill="#1e293b" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="505" y="480" fill="#e2e8f0" font-size="12" font-weight="bold" font-family="system-ui,sans-serif">LLM TextGen</text>
+  <text x="505" y="498" fill="#94a3b8" font-size="10" font-family="monospace">Intel/neural-chat-7b · /v1/chat/completions · Causal Intelligence Reports</text>
+
+  <!-- OPEA Component 2 -->
+  <rect x="490" y="523" width="175" height="55" rx="8" fill="#1e293b" stroke="#f59e0b" stroke-width="1.5"/>
+  <text x="505" y="543" fill="#e2e8f0" font-size="12" font-weight="bold" font-family="system-ui,sans-serif">TEI Embedding</text>
+  <text x="505" y="561" fill="#94a3b8" font-size="10" font-family="monospace">bge-base-en-v1.5</text>
+  <text x="505" y="573" fill="#94a3b8" font-size="9" font-family="monospace">768-dim vectors</text>
+
+  <rect x="675" y="523" width="175" height="55" rx="8" fill="#1e293b" stroke="#ef4444" stroke-width="1.5"/>
+  <text x="690" y="543" fill="#e2e8f0" font-size="12" font-weight="bold" font-family="system-ui,sans-serif">TEI Reranking</text>
+  <text x="690" y="561" fill="#94a3b8" font-size="10" font-family="monospace">bge-reranker-base</text>
+  <text x="690" y="573" fill="#94a3b8" font-size="9" font-family="monospace">Cross-encoder</text>
+
+  <!-- Arrow from API to OPEA -->
+  <line x1="670" y1="210" x2="670" y2="410" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <text x="680" y="310" fill="#a78bfa" font-size="10" font-family="system-ui,sans-serif">Evidence → RAG Briefing</text>
+
+  <!-- Output -->
+  <rect x="520" y="600" width="300" height="50" rx="10" fill="#0f172a" stroke="#34d399" stroke-width="2" filter="url(#glow)"/>
+  <text x="670" y="620" text-anchor="middle" fill="#34d399" font-size="13" font-weight="bold" font-family="system-ui,sans-serif">OPEA Causal Intelligence Report</text>
+  <text x="670" y="638" text-anchor="middle" fill="#94a3b8" font-size="10" font-family="monospace">Markdown briefing with ATE, CI, and playbook advice</text>
+
+  <!-- Arrow from OPEA to Output -->
+  <line x1="670" y1="578" x2="670" y2="600" stroke="#34d399" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- Results box -->
+  <rect x="490" y="230" width="360" height="90" rx="8" fill="#1e293b" stroke="#10b981" stroke-width="1"/>
+  <text x="505" y="252" fill="#e2e8f0" font-size="11" font-weight="bold" font-family="system-ui,sans-serif">RAG Pipeline Flow</text>
+  <text x="505" y="270" fill="#94a3b8" font-size="10" font-family="monospace">Query → Embed → Cosine → Rerank → LLM Briefing</text>
+  <text x="505" y="286" fill="#94a3b8" font-size="10" font-family="monospace">Graceful fallback: OPEA → OpenAI → Template</text>
+  <text x="505" y="306" fill="#34d399" font-size="10" font-family="monospace" font-weight="bold">Full report: 2-8s (CPU) · Lookup: &lt;0.5ms</text>
+
+  <!-- Benchmarks callout -->
+  <rect x="490" y="330" width="360" height="65" rx="8" fill="#1e293b" stroke="#475569" stroke-width="1"/>
+  <text x="505" y="350" fill="#e2e8f0" font-size="11" font-weight="bold" font-family="system-ui,sans-serif">Live Benchmarks (captured)</text>
+  <text x="505" y="366" fill="#fbbf24" font-size="10" font-family="monospace">Discovery F1: 90.9% · Refutation: 93.8% · Lookup: 0.49ms</text>
+  <text x="505" y="380" fill="#94a3b8" font-size="10" font-family="monospace">SHD: 2 · Validated: 15 · Quarantined: 1 · Memory: 96 MB</text>
+
+  <!-- Flow arrows between offline steps -->
+  <line x1="490" y1="350" x2="505" y2="350" stroke="#60a5fa" stroke-width="2" marker-end="url(#arrowhead-blue)" stroke-dasharray="4,2"/>
+  <text x="492" y="342" fill="#60a5fa" font-size="9" font-family="system-ui,sans-serif">Data flows to</text>
+
+  <!-- Arrow from Estimation to Safety Map -->
+  <path d="M 240 460 L 240 470 L 240 490" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+</svg>

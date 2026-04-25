@@ -1,0 +1,56 @@
+%% CDIE v5 — Deployment Architecture (Docker Compose)
+%% 8 Services on Single Node (~57GB RAM)
+graph TB
+    subgraph Docker_Network["Docker Bridge: cdie-network"]
+        subgraph OPEA_Services["OPEA GenAIComps (4 containers / 44GB)"]
+            TGI["TGI Service<br/>Port 8008<br/>ghcr.io/huggingface/tgi:2.4.0<br/>32GB RAM, 4 CPUs<br/>Intel/neural-chat-7b-v3-3"]
+            LLMSVC["OPEA LLM TextGen<br/>Port 9000<br/>opea/llm-textgen:latest<br/>4GB RAM, 2 CPUs<br/>OpenAI-compatible API"]
+            TEIEMB["TEI Embedding<br/>Port 6006<br/>ghcr.io/huggingface/tei:cpu-latest<br/>4GB RAM, 2 CPUs<br/>BAAI/bge-base-en-v1.5"]
+            TEIRNK["TEI Reranking<br/>Port 8808<br/>ghcr.io/huggingface/tei:cpu-latest<br/>4GB RAM, 2 CPUs<br/>BAAI/bge-reranker-base"]
+            TGI -->|"wraps"| LLMSVC
+        end
+
+        subgraph CDIE_Services["CDIE Core (3 containers / 14GB)"]
+            PIPELINE["Pipeline<br/>(One-shot run)<br/>8GB RAM, 4 CPUs<br/>Offline Causal Discovery"]
+            API["FastAPI Backend<br/>Port 8000<br/>4GB RAM, 2 CPUs<br/>Safety Map + RAG"]
+            NEXTJS["Next.js UI<br/>Port 3000<br/>2GB RAM, 1 CPU<br/>Production Dashboard"]
+            PIPELINE -->|"safety_map.db"| API
+        end
+
+        STREAMLIT["Streamlit UI (Legacy)<br/>Port 8501<br/>1GB RAM, 0.5 CPU"]
+    end
+
+    subgraph Volumes["Docker Volumes"]
+        VTGI["tgi-data"]
+        VTEIEMB["tei-embedding-data"]
+        VTEIRNK["tei-reranking-data"]
+        VRT["runtime-data"]
+    end
+
+    subgraph External["External"]
+        USER["User Browser<br/>http://localhost:3000"]
+        HF["HuggingFace Hub<br/>(Model Download)"]
+    end
+
+    HF -->|"HF_TOKEN"| TGI
+    HF -->|"HF_TOKEN"| TEIEMB
+    HF -->|"HF_TOKEN"| TEIRNK
+    USER --> NEXTJS
+    NEXTJS --> API
+    NEXTJS -->|"fallback"| STREAMLIT
+    API -->|"RAG"| LLMSVC
+    API -->|"embed"| TEIEMB
+    API -->|"rerank"| TEIRNK
+    TGI -.-> VTGI
+    TEIEMB -.-> VTEIEMB
+    TEIRNK -.-> VTEIRNK
+    API -.-> VRT
+    PIPELINE -.-> VRT
+
+    style Docker_Network fill:#e3f2fd
+    style OPEA_Services fill:#bbdefb
+    style CDIE_Services fill:#fff3e0
+    style Volumes fill:#e8f5e9
+    style External fill:#f3e5f5
+    style USER fill:#4caf50,color:#fff
+    style HF fill:#7c4dff,color:#fff

@@ -1,0 +1,87 @@
+%% CDIE v5 — Data Flow Diagram (End-to-End)
+%% From raw telecom data to actionable intelligence
+graph LR
+    subgraph Sources["Data Sources"]
+        S1["Synthetic SCM<br/>12-node DAG<br/>2000 samples"]
+        S2["Real CDR Data<br/>(Future Integration)"]
+        S3["Domain Expert Priors<br/>extracted_priors.json"]
+    end
+
+    subgraph Ingest["Data Ingestion"]
+        I1["Validate Schema<br/>schema_contract.py"]
+        I2["Impute Missing Values<br/>Winsorize Outliers<br/>ADF Stationarity Check"]
+        S1 --> I1 --> I2
+        S2 --> I1
+    end
+
+    subgraph Discovery["Causal Discovery"]
+        D1["GFCI Algorithm<br/>Structure Learning"]
+        D2["Granger Causality<br/>Temporal Validation"]
+        D3["Dynamic Priors<br/>OPEA-Extracted"]
+        D3 --> D1
+        I2 --> D1
+        I2 --> D2
+    end
+
+    subgraph Validate["Validation"]
+        V1["CATL Tests<br/>Faithfulness / Sufficiency<br/>Positivity / Overlap"]
+        V2["DoWhy Refutation<br/>Placebo / Random / Subset"]
+        V3["Benchmarks<br/>SACHS + ALARM"]
+        D1 --> V1
+        D1 --> V2
+        D1 --> V3
+    end
+
+    subgraph Estimate["Effect Estimation"]
+        E1["LinearDML<br/>Doubly-Robust ATE"]
+        E2["MAPIE<br/>95% Conformal CIs"]
+        V2 --> E1 --> E2
+    end
+
+    subgraph Persist["Safety Map"]
+        P1["SQLite Database<br/>safety_map.db (776 KB)"]
+        P2["JSON Export<br/>safety_map.json (806 KB)"]
+        P3["SHA-256 Digest<br/>Integrity Hash"]
+        E2 --> P1 --> P2
+        P1 --> P3
+        V1 --> P1
+    end
+
+    subgraph Serve["Online Query"]
+        Q1["User Query<br/>Natural Language"]
+        Q2["Intent Classification<br/>4 Types"]
+        Q3["Safety Map Lookup<br/>&lt; 0.3ms"]
+        Q4["Drift Detection<br/>KS-Staleness"]
+        Q1 --> Q2 --> Q3
+        Q2 --> Q4
+    end
+
+    subgraph Report["Intelligence Report"]
+        R1["TEI Embedding<br/>768-dim Vector"]
+        R2["Cosine Retrieval<br/>Top-6 Playbooks"]
+        R3["TEI Reranking<br/>Cross-Encoder"]
+        R4["OPEA LLM Generation<br/>Structured Markdown"]
+        R5["Prescriptive Rankings<br/>Intervention Impact + CIs"]
+        
+        Q3 --> R1 --> R2 --> R3 --> R4 --> R5
+        P2 --> R1
+    end
+
+    subgraph Visualize["Visualization"]
+        Z1["Next.js Dashboard<br/>React Flow DAG"]
+        Z2["Drift Alerts<br/>Timeline View"]
+        Z3["Prescriptive Mode<br/>Ranked Interventions"]
+        R5 --> Z1
+        R5 --> Z2
+        R5 --> Z3
+    end
+
+    style Sources fill:#e3f2fd
+    style Ingest fill:#e8f5e9
+    style Discovery fill:#fff3e0
+    style Validate fill:#fce4ec
+    style Estimate fill:#e0f7fa
+    style Persist fill:#4caf50,color:#fff
+    style Serve fill:#ffcc80
+    style Report fill:#ffe0b2
+    style Visualize fill:#c8e6c9

@@ -1,5 +1,18 @@
 # CDIE v5 — How to Demo
 
+## 📖 Demo Script: SIM Box Fraud Detection Narrative
+
+**Scenario**: A regional telecom operator noticed a sudden 15% drop in monthly revenue and a 20% increase in network congestion. Traditional analytics identified the symptoms but couldn't pinpoint the cause or the best intervention.
+
+**Narrative Steps**:
+1. **The Investigation**: "We're showing how CDIE detected SIM box fraud for a regional operator. The operator noticed dropped calls and revenue leakage. They suspected network issues or competitor pricing."
+2. **The Query**: "Instead of guessing, the operator ran a causal query: *'What happens if SIM box fraud attempts increase by 30%?'*"
+3. **The Discovery**: Open the Dashboard. Show the causal graph where `SIMBoxFraudAttempts` directly drives `RevenueLeakageVolume` and `NetworkLoad`.
+4. **The Recommendation**: "CDIE recommended tightening the `FraudPolicyStrictness` by 20%. The causal model estimated this would recover 85% of the leaked revenue ($1.2M/month) without significantly impacting legitimate subscriber retention."
+5. **The Outcome**: "The operator implemented the policy. Three weeks later, they validated the causal prediction: revenue recovered by $1.15M (96% accuracy), and network congestion normalized. CDIE turned a correlation into a multi-million dollar recovery strategy."
+
+---
+
 ## Quick Demo (Recommended — no Docker, <100 MB RAM)
 
 Runs in seconds on any machine with Python 3.11+. Uses pre-computed artifacts.
@@ -100,6 +113,17 @@ curl http://localhost:8000/benchmark/hardware
 curl -X POST http://localhost:8000/query \
   -H "Content-Type: application/json" \
   -d '{"query": "What happens if SIM box fraud attempts increase by 30%?"}'
+
+# Batch Causal Analysis (Bulk Lookup)
+# Efficiently analyze multiple intervention paths in a single call
+curl -X POST http://localhost:8000/batch_query \
+  -H "Content-Type: application/json" \
+  -d '{"queries": [
+    {"source": "SIMBoxFraudAttempts", "target": "RevenueLeakageVolume", "magnitude": 30},
+    {"source": "FraudPolicyStrictness", "target": "SIMFraudDetectionRate", "magnitude": 20},
+    {"source": "RevenueLeakageVolume", "target": "CashFlowRisk", "magnitude": 15}
+  ]}'
+
 ```
 
 ## Frontend

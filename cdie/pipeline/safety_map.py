@@ -4,22 +4,26 @@ Pre-computes all validated causal intervention scenarios
 and stores them as an indexed JSON for O(log n) online lookup.
 """
 
-import json
 import hashlib
-import time
-import sqlite3
+import json
 import os
 import shutil
-from typing import Optional
+import time
 from pathlib import Path
+from typing import Any
+
 import numpy as np
 import pandas as pd
 
-from cdie.pipeline.data_generator import VARIABLE_NAMES, DATA_DIR
+from cdie.config import DATA_DIR, MAGNITUDE_LEVELS, VARIABLE_NAMES
+from cdie.observability import get_logger
+from cdie.pipeline.datastore import DataStoreManager
 from cdie.runtime import get_runtime_paths
 
+log = get_logger(__name__)
 
-def _sanitize_keys(obj):
+
+def _sanitize_keys(obj: Any) -> Any:
     """Recursively convert all dict keys to strings for JSON serialization."""
     if isinstance(obj, dict):
         return {str(k): _sanitize_keys(v) for k, v in obj.items()}
@@ -34,39 +38,20 @@ def _sanitize_keys(obj):
     return obj
 
 
-MAGNITUDE_LEVELS = {
-    "increase_5": 0.05,
-    "increase_10": 0.10,
-    "increase_15": 0.15,
-    "increase_20": 0.20,
-    "increase_25": 0.25,
-    "increase_30": 0.30,
-    "increase_40": 0.40,
-    "increase_50": 0.50,
-    "decrease_5": -0.05,
-    "decrease_10": -0.10,
-    "decrease_15": -0.15,
-    "decrease_20": -0.20,
-    "decrease_25": -0.25,
-    "decrease_30": -0.30,
-    "decrease_40": -0.40,
-    "decrease_50": -0.50,
-}
 
-
-def generate_scenario_id(source, target, magnitude_key):
+def generate_scenario_id(source: str, target: str, magnitude_key: str) -> str:
     """Generate a unique scenario ID."""
-    return f"{source}__{target}__{magnitude_key}"
+    return f'{source}__{target}__{magnitude_key}'
 
 
-def compute_intervention_effect(data, source, target, magnitude, ate_info):
+def compute_intervention_effect(data: pd.DataFrame, source: str, _target: str, magnitude: float, ate_info: dict[str, Any]) -> dict[str, Any]:
     """
     Compute the estimated effect of an intervention.
     Uses the pre-computed ATE to scale effects.
     """
-    ate = ate_info.get("ate", {}).get("ate", 0)
-    ci_lower = ate_info.get("ate", {}).get("ci_lower", ate * 0.8)
-    ci_upper = ate_info.get("ate", {}).get("ci_upper", ate * 1.2)
+    ate = ate_info.get('ate', {}).get('ate', 0)
+    ci_lower = ate_info.get('ate', {}).get('ci_lower', ate * 0.8)
+    ci_upper = ate_info.get('ate', {}).get('ci_upper', ate * 1.2)
 
     is_discrete = data[source].nunique() < 10
 
@@ -91,159 +76,146 @@ def compute_intervention_effect(data, source, target, magnitude, ate_info):
         lower, upper = upper, lower
 
     return {
-        "point_estimate": float(np.round(float(effect), 4)),
-        "ci_lower": float(np.round(float(lower), 4)),
-        "ci_upper": float(np.round(float(upper), 4)),
-        "confidence_level": 0.95,
-        "ate_used": float(np.round(float(ate), 4)),
-        "intervention_amount": float(np.round(float(intervention_amount), 4)),
+        'point_estimate': float(np.round(float(effect), 4)),
+        'ci_lower': float(np.round(float(lower), 4)),
+        'ci_upper': float(np.round(float(upper), 4)),
+        'confidence_level': 0.95,
+        'ate_used': float(np.round(float(ate), 4)),
+        'intervention_amount': float(np.round(float(intervention_amount), 4)),
     }
 
 
 def build_safety_map(
     data: pd.DataFrame,
-    estimation_results: dict,
-    refutation_results: dict,
-    catl_results: dict,
-    temporal_results: dict,
-    benchmark_results: dict,
-    discovery_results: dict,
-):
+    estimation_results: dict[str, Any],
+    refutation_results: dict[str, Any],
+    catl_results: dict[str, Any],
+    temporal_results: dict[str, Any],
+    benchmark_results: dict[str, Any],
+    discovery_results: dict[str, Any],
+) -> dict[str, Any]:
     """
     Assemble the complete Safety Map from all pipeline outputs.
     """
-    print("[SafetyMap] Building Safety Map...")
+    log.info('[SafetyMap] Building Safety Map...')
 
-    from typing import Any, Dict
+    from typing import Any
 
-    safety_map: Dict[str, Any] = {
-        "version": "4.0.0",
-        "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "n_variables": len(VARIABLE_NAMES),
-        "variable_names": VARIABLE_NAMES,
-        "catl": catl_results,
-        "benchmarks": benchmark_results,
-        "temporal": temporal_results,
-        "discovery_metadata": {
-            "algorithm": discovery_results.get("algorithm_used", "GFCI"),
-            "n_edges_discovered": discovery_results.get("n_edges_discovered", 0),
-            "n_dag_edges": discovery_results.get("n_dag_edges", 0),
+    safety_map: dict[str, Any] = {
+        'version': '4.0.0',
+        'created_at': time.strftime('%Y-%m-%dT%H:%M:%SZ'),
+        'n_variables': len(VARIABLE_NAMES),
+        'variable_names': VARIABLE_NAMES,
+        'catl': catl_results,
+        'benchmarks': benchmark_results,
+        'temporal': temporal_results,
+        'discovery_metadata': {
+            'algorithm': discovery_results.get('algorithm_used', 'GFCI'),
+            'n_edges_discovered': discovery_results.get('n_edges_discovered', 0),
+            'n_dag_edges': discovery_results.get('n_dag_edges', 0),
         },
-        "graph": {
-            "nodes": [
-                {"id": v, "label": v, "type": "variable"} for v in VARIABLE_NAMES
-            ],
-            "edges": [],
+        'graph': {
+            'nodes': [{'id': v, 'label': v, 'type': 'variable'} for v in VARIABLE_NAMES],
+            'edges': [],
         },
-        "scenarios": {},
-        "refutation_summary": {
-            "pass_rate": refutation_results.get("pass_rate", 0),
-            "validated_count": len(refutation_results.get("validated_edges", [])),
-            "quarantined_count": len(refutation_results.get("quarantined_edges", [])),
+        'scenarios': {},
+        'refutation_summary': {
+            'pass_rate': refutation_results.get('pass_rate', 0),
+            'validated_count': len(refutation_results.get('validated_edges', [])),
+            'quarantined_count': len(refutation_results.get('quarantined_edges', [])),
         },
-        "quarantined_edges": [],
-        "training_distributions": {},
+        'quarantined_edges': [],
+        'training_distributions': {},
     }
 
     # Add graph edges
-    for edge_key, edge_info in refutation_results.get("edge_results", {}).items():
-        src = edge_info["source"]
-        tgt = edge_info["target"]
-        safety_map["graph"]["edges"].append(
+    for edge_key, edge_info in refutation_results.get('edge_results', {}).items():
+        src = edge_info['source']
+        tgt = edge_info['target']
+        safety_map['graph']['edges'].append(
             {
-                "from": src,
-                "to": tgt,
-                "edge_type": "directed",
-                "weight": estimation_results.get(edge_key, {})
-                .get("ate", {})
-                .get("ate", 0),
-                "refutation_status": "QUARANTINED"
-                if edge_info["quarantined"]
-                else "VALIDATED",
-                "tests": edge_info["tests"],
+                'from': src,
+                'to': tgt,
+                'edge_type': 'directed',
+                'weight': estimation_results.get(edge_key, {}).get('ate', {}).get('ate', 0),
+                'refutation_status': 'QUARANTINED' if edge_info['quarantined'] else 'VALIDATED',
+                'tests': edge_info['tests'],
             }
         )
 
     # Add quarantined edges
-    for src, tgt in refutation_results.get("quarantined_edges", []):
-        safety_map["quarantined_edges"].append({"source": src, "target": tgt})
+    for src, tgt in refutation_results.get('quarantined_edges', []):
+        safety_map['quarantined_edges'].append({'source': src, 'target': tgt})
 
     # Pre-compute scenarios for validated edges
     n_scenarios: int = 0
-    for edge_key, est_info in estimation_results.items():
-        src = est_info["source"]
-        tgt = est_info["target"]
+    for _edge_key, est_info in estimation_results.items():
+        src = est_info['source']
+        tgt = est_info['target']
 
         # Check if edge is quarantined
-        is_quarantined = (src, tgt) in [
-            tuple(e) for e in refutation_results.get("quarantined_edges", [])
-        ]
+        is_quarantined = (src, tgt) in [tuple(e) for e in refutation_results.get('quarantined_edges', [])]
 
         for mag_key, mag_val in MAGNITUDE_LEVELS.items():
             scenario_id = generate_scenario_id(src, tgt, mag_key)
             effect = compute_intervention_effect(data, src, tgt, mag_val, est_info)
 
             scenario = {
-                "id": scenario_id,
-                "source": src,
-                "target": tgt,
-                "magnitude_key": mag_key,
-                "magnitude_value": mag_val,
-                "effect": effect,
-                "cate_by_segment": est_info.get("cate_by_segment", {}),
-                "cate_by_volume": est_info.get("cate_by_volume", {}),
-                "refutation_status": "QUARANTINED" if is_quarantined else "VALIDATED",
-                "causal_path": f"{src} → {tgt}",
+                'id': scenario_id,
+                'source': src,
+                'target': tgt,
+                'magnitude_key': mag_key,
+                'magnitude_value': mag_val,
+                'effect': effect,
+                'feature_importance': est_info.get('feature_importance', {}),
+                'cate_by_segment': est_info.get('cate_by_segment', {}),
+                'cate_by_volume': est_info.get('cate_by_volume', {}),
+                'refutation_status': 'QUARANTINED' if is_quarantined else 'VALIDATED',
+                'causal_path': f'{src} → {tgt}',
             }
 
-            safety_map["scenarios"][scenario_id] = scenario
+            safety_map['scenarios'][scenario_id] = scenario
             n_scenarios += 1
 
     # Store training distributions for KS-test staleness
     for col in VARIABLE_NAMES:
         if col in data.columns:
-            safety_map["training_distributions"][col] = {
-                "mean": float(np.round(float(data[col].mean()), 4)),
-                "std": float(np.round(float(data[col].std()), 4)),
-                "q25": float(np.round(float(data[col].quantile(0.25)), 4)),
-                "q50": float(np.round(float(data[col].quantile(0.50)), 4)),
-                "q75": float(np.round(float(data[col].quantile(0.75)), 4)),
-                "min": float(np.round(float(data[col].min()), 4)),
-                "max": float(np.round(float(data[col].max()), 4)),
-                "sample_values": data[col]
-                .sample(min(100, len(data)), random_state=42)
-                .tolist(),
+            safety_map['training_distributions'][col] = {
+                'mean': float(np.round(float(data[col].mean()), 4)),
+                'std': float(np.round(float(data[col].std()), 4)),
+                'q25': float(np.round(float(data[col].quantile(0.25)), 4)),
+                'q50': float(np.round(float(data[col].quantile(0.50)), 4)),
+                'q75': float(np.round(float(data[col].quantile(0.75)), 4)),
+                'min': float(np.round(float(data[col].min()), 4)),
+                'max': float(np.round(float(data[col].max()), 4)),
+                'sample_values': data[col].sample(min(100, len(data)), random_state=42).tolist(),
             }
 
     # XGBoost comparison data
-    safety_map["xgboost_comparison"] = _generate_xgboost_comparison(data)
+    safety_map['xgboost_comparison'] = _generate_xgboost_comparison(data)
 
-    print(
-        f"[SafetyMap] Built {n_scenarios} scenarios for {len(estimation_results)} edges"
-    )
+    log.info('[SafetyMap] Built Safety Map', n_scenarios=n_scenarios, n_edges=len(estimation_results))
     return safety_map
 
 
-def _generate_xgboost_comparison(data: pd.DataFrame):
+def _generate_xgboost_comparison(data: pd.DataFrame) -> dict[str, Any]:
     """Generate XGBoost SHAP feature importance for comparison."""
     try:
-        import xgboost as xgb
         import shap
+        import xgboost as xgb
 
         numeric_cols = [c for c in VARIABLE_NAMES if c in data.columns]
-        target = "ARPUImpact"
+        target = 'ARPUImpact'
         features = [c for c in numeric_cols if c != target]
 
-        X = data[features].values
-        y = data[target].values
+        x_data = data[features].values
+        y_data = data[target].values
 
-        model = xgb.XGBRegressor(
-            n_estimators=100, max_depth=4, random_state=42, verbosity=0
-        )
-        model.fit(X, y)
+        model = xgb.XGBRegressor(n_estimators=100, max_depth=4, random_state=42, verbosity=0)
+        model.fit(x_data, y_data)
 
         explainer = shap.TreeExplainer(model)
-        shap_values = explainer.shap_values(X)
+        shap_values = explainer.shap_values(x_data)
         mean_abs_shap = np.abs(shap_values).mean(axis=0)
 
         importance = {}
@@ -251,129 +223,122 @@ def _generate_xgboost_comparison(data: pd.DataFrame):
             importance[feat] = float(np.round(float(mean_abs_shap[i]), 4))
 
         return {
-            "target": target,
-            "feature_importance": importance,
-            "model_r2": float(np.round(float(model.score(X, y)), 4)),
-            "status": "COMPLETE",
+            'target': target,
+            'feature_importance': importance,
+            'model_r2': float(np.round(float(model.score(x_data, y_data)), 4)),
+            'status': 'COMPLETE',
         }
     except Exception as e:
         # Provide realistic fallback values
         return {
-            "target": "ARPUImpact",
-            "feature_importance": {
-                "RevenueLeakageVolume": 0.35,
-                "SubscriberRetentionScore": 0.22,
-                "SIMBoxFraudAttempts": 0.12,
-                "FraudPolicyStrictness": 0.09,
-                "SIMFraudDetectionRate": 0.08,
-                "NetworkLoad": 0.05,
-                "NetworkOpExCost": 0.04,
-                "CashFlowRisk": 0.03,
-                "RegulatorySignal": 0.01,
-                "ITURegulatoryPressure": 0.01,
+            'target': 'ARPUImpact',
+            'feature_importance': {
+                'RevenueLeakageVolume': 0.35,
+                'SubscriberRetentionScore': 0.22,
+                'SIMBoxFraudAttempts': 0.12,
+                'FraudPolicyStrictness': 0.09,
+                'SIMFraudDetectionRate': 0.08,
+                'NetworkLoad': 0.05,
+                'NetworkOpExCost': 0.04,
+                'CashFlowRisk': 0.03,
+                'RegulatorySignal': 0.01,
+                'ITURegulatoryPressure': 0.01,
             },
-            "model_r2": 0.87,
-            "status": f"SIMULATED ({str(e)[:30]})",
+            'model_r2': 0.87,
+            'status': f'SIMULATED ({str(e)[:30]})',
         }
 
 
-def _write_sqlite_safety_map(sqlite_path: Path, safety_map: dict) -> None:
+def _write_sqlite_safety_map(sqlite_path: Path, safety_map: dict[str, Any]) -> None:
     """Write the Safety Map into a SQLite database at the provided path."""
     sqlite_path.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(sqlite_path) as conn:
-        cursor = conn.cursor()
+    store = DataStoreManager.get_sqlite_store(sqlite_path)
 
-        cursor.execute(
-            """CREATE TABLE IF NOT EXISTS scenarios (
-                id TEXT PRIMARY KEY,
-                source TEXT,
-                target TEXT,
-                magnitude_key TEXT,
-                magnitude_value REAL,
-                effect_point REAL,
-                effect_lower REAL,
-                effect_upper REAL,
-                refutation_status TEXT,
-                data_payload TEXT
-            )"""
-        )
+    store.execute_script(
+        """CREATE TABLE IF NOT EXISTS scenarios (
+            id TEXT PRIMARY KEY,
+            source TEXT,
+            target TEXT,
+            magnitude_key TEXT,
+            magnitude_value REAL,
+            effect_point REAL,
+            effect_lower REAL,
+            effect_upper REAL,
+            refutation_status TEXT,
+            data_payload TEXT
+        );
+        CREATE TABLE IF NOT EXISTS store (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        );
+        DELETE FROM scenarios;
+        DELETE FROM store;
+        """
+    )
 
-        cursor.execute(
-            """CREATE TABLE IF NOT EXISTS store (
-                key TEXT PRIMARY KEY,
-                value TEXT
-            )"""
-        )
-
-        cursor.execute("DELETE FROM scenarios")
-        cursor.execute("DELETE FROM store")
-
-        scenarios = safety_map.get("scenarios", {})
-        scenario_rows = []
-        for sid, sc in scenarios.items():
-            effect = sc.get("effect", {})
-            scenario_rows.append(
-                (
-                    sid,
-                    sc["source"],
-                    sc["target"],
-                    sc["magnitude_key"],
-                    sc["magnitude_value"],
-                    effect.get("point_estimate", 0),
-                    effect.get("ci_lower", 0),
-                    effect.get("ci_upper", 0),
-                    sc.get("refutation_status", "UNKNOWN"),
-                    json.dumps(sc),
-                )
+    scenarios = safety_map.get('scenarios', {})
+    scenario_rows = []
+    for sid, sc in scenarios.items():
+        effect = sc.get('effect', {})
+        scenario_rows.append(
+            (
+                sid,
+                sc['source'],
+                sc['target'],
+                sc['magnitude_key'],
+                sc['magnitude_value'],
+                effect.get('point_estimate', 0),
+                effect.get('ci_lower', 0),
+                effect.get('ci_upper', 0),
+                sc.get('refutation_status', 'UNKNOWN'),
+                json.dumps(sc),
             )
-
-        cursor.executemany(
-            """
-            INSERT INTO scenarios (
-                id, source, target, magnitude_key, magnitude_value,
-                effect_point, effect_lower, effect_upper,
-                refutation_status, data_payload
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            scenario_rows,
         )
 
-        cursor.execute(
-            "CREATE INDEX IF NOT EXISTS idx_source_target ON scenarios(source, target)"
-        )
+    store.execute_many(
+        """
+        INSERT INTO scenarios (
+            id, source, target, magnitude_key, magnitude_value,
+            effect_point, effect_lower, effect_upper,
+            refutation_status, data_payload
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        scenario_rows,
+    )
 
-        store_rows = []
-        for key, value in safety_map.items():
-            if key == "scenarios":
-                continue
-            store_rows.append((key, json.dumps(value)))
+    store.execute('CREATE INDEX IF NOT EXISTS idx_source_target ON scenarios(source, target)')
 
-        cursor.executemany("INSERT INTO store (key, value) VALUES (?, ?)", store_rows)
-        conn.commit()
+    store_rows = []
+    for key, value in safety_map.items():
+        if key == 'scenarios':
+            continue
+        store_rows.append((key, json.dumps(value)))
+
+    store.execute_many('INSERT INTO store (key, value) VALUES (?, ?)', store_rows)
 
 
-def save_safety_map(safety_map: dict, output_dir: Optional[Path] = None):
+def save_safety_map(safety_map: dict[str, Any], output_dir: Path | None = None) -> tuple[Path, str]:
     """Save Safety Map with SHA-256 integrity hash into JSON and SQLite stores."""
     out = output_dir or DATA_DIR
     out.mkdir(parents=True, exist_ok=True)
     runtime_paths = get_runtime_paths(out, create=True)
 
-    db_path = out / "safety_map.db"
-    json_path = out / "safety_map.json"
-    backup_path = out / "safety_map.db.bak"
-    runtime_db_path = runtime_paths["runtime_db"]
-    runtime_temp_db_path = runtime_paths["runtime_temp_db"]
-    runtime_backup_path = runtime_paths["runtime_db_backup"]
-    journal_path = Path(f"{db_path}-journal")
+    db_path = out / 'safety_map.db'
+    json_path = out / 'safety_map.json'
+    backup_path = out / 'safety_map.db.bak'
+    runtime_db_path = runtime_paths['runtime_db']
+    runtime_temp_db_path = runtime_paths['runtime_temp_db']
+    runtime_backup_path = runtime_paths['runtime_db_backup']
+    journal_path = Path(f'{db_path}-journal')
 
     # Compute hash before saving
     safety_map = _sanitize_keys(safety_map)
     content = json.dumps(safety_map, sort_keys=True, default=str)
     sha256_hash = hashlib.sha256(content.encode()).hexdigest()
-    safety_map["sha256_hash"] = sha256_hash
+    safety_map['sha256_hash'] = sha256_hash
     json_content = json.dumps(safety_map, indent=2, default=str)
 
-    with open(json_path, "w", encoding="utf-8") as f:
+    with open(json_path, 'w', encoding='utf-8') as f:
         f.write(json_content)
 
     for stale_path in (runtime_temp_db_path,):
@@ -381,80 +346,81 @@ def save_safety_map(safety_map: dict, output_dir: Optional[Path] = None):
             try:
                 stale_path.unlink()
             except Exception as e:
-                print(f"[SafetyMap] Temp cleanup skipped for {stale_path.name}: {e}")
+                print(f'[SafetyMap] Temp cleanup skipped for {stale_path.name}: {e}')
                 return json_path, sha256_hash
 
     storage_target = json_path
-    sqlite_status = "json-only"
-    sqlite_error = ""
+    sqlite_status = 'json-only'
+    sqlite_error = ''
 
     try:
         _write_sqlite_safety_map(runtime_temp_db_path, safety_map)
         os.replace(runtime_temp_db_path, runtime_db_path)
         storage_target = runtime_db_path
-        sqlite_status = "runtime-sqlite"
+        sqlite_status = 'runtime-sqlite'
 
         try:
             shutil.copy2(runtime_db_path, runtime_backup_path)
         except Exception as e:
-            print(f"[SafetyMap] Runtime SQLite backup refresh skipped: {e}")
+            print(f'[SafetyMap] Runtime SQLite backup refresh skipped: {e}')
 
         try:
             if journal_path.exists():
                 journal_path.unlink()
             shutil.copy2(runtime_db_path, db_path)
             storage_target = db_path
-            sqlite_status = "mirrored-sqlite"
+            sqlite_status = 'mirrored-sqlite'
             try:
                 shutil.copy2(db_path, backup_path)
             except Exception as e:
-                print(f"[SafetyMap] Project SQLite backup refresh skipped: {e}")
+                print(f'[SafetyMap] Project SQLite backup refresh skipped: {e}')
         except Exception as e:
             sqlite_error = str(e)
-            print(f"[SafetyMap] Project SQLite mirror skipped: {e}")
+            print(f'[SafetyMap] Project SQLite mirror skipped: {e}')
 
         file_size = runtime_db_path.stat().st_size
         print(
-            f"[SafetyMap] Saved runtime SQLite DB to {runtime_db_path} ({file_size / 1024:.1f} KB, hash={sha256_hash[:16]}...)"
+            f'[SafetyMap] Saved runtime SQLite DB to {runtime_db_path} '
+            f'({file_size / 1024:.1f} KB, hash={sha256_hash[:16]}...)'
         )
     except Exception as e:
         sqlite_error = str(e)
-        print(f"[SafetyMap] SQLite save skipped: {e}")
+        print(f'[SafetyMap] SQLite save skipped: {e}')
 
     # Drift history should remain available even when SQLite mirroring fails.
     try:
         from cdie.api.drift import DriftAnalyzer
 
-        graph = safety_map.get("graph", {})
-        edges = [(e["from"], e["to"]) for e in graph.get("edges", [])]
+        graph = safety_map.get('graph', {})
+        edges = [(e['from'], e['to']) for e in graph.get('edges', [])]
         ate_map = {}
-        for sc in safety_map.get("scenarios", {}).values():
-            src, tgt = sc.get("source", ""), sc.get("target", "")
-            ate = sc.get("effect", {}).get("point_estimate", 0)
-            ate_map[f"{src}->{tgt}"] = ate
+        for sc in safety_map.get('scenarios', {}).values():
+            src, tgt = sc.get('source', ''), sc.get('target', '')
+            ate = sc.get('effect', {}).get('point_estimate', 0)
+            ate_map[f'{src}->{tgt}'] = ate
 
-        snapshot_status = "validated" if sqlite_status != "json-only" else "json-fallback"
+        snapshot_status = 'validated' if sqlite_status != 'json-only' else 'json-fallback'
         analyzer = DriftAnalyzer(
             db_path=runtime_db_path,
-            history_dir=runtime_paths["drift_dir"],
+            history_dir=runtime_paths['drift_dir'],
         )
         analyzer.save_snapshot(
             edges,
             ate_map,
             metadata={
-                "sha256": sha256_hash,
-                "snapshot_status": snapshot_status,
-                "storage_backend": "json+sqlite" if sqlite_status != "json-only" else "json",
-                "canonical_json": str(json_path),
-                "sqlite_error": sqlite_error,
+                'sha256': sha256_hash,
+                'snapshot_status': snapshot_status,
+                'storage_backend': 'json+sqlite' if sqlite_status != 'json-only' else 'json',
+                'canonical_json': str(json_path),
+                'sqlite_error': sqlite_error,
             },
         )
-        print(f"[SafetyMap] DAG snapshot saved for drift tracking ({len(edges)} edges)")
+        print(f'[SafetyMap] DAG snapshot saved for drift tracking ({len(edges)} edges)')
     except Exception as e:
-        print(f"[SafetyMap] Drift snapshot skipped: {e}")
+        print(f'[SafetyMap] Drift snapshot skipped: {e}')
 
     return storage_target, sha256_hash
 
 
-if __name__ == "__main__":
-    print("Safety Map generator — run via run_pipeline.py")
+if __name__ == '__main__':
+    print('Safety Map generator — run via run_pipeline.py')
