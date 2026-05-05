@@ -48,6 +48,36 @@ During development, if you do not have access to an Intel Xeon node, you can moc
 
 ---
 
+## 🧩 How to Add a New Causal Method
+
+Adding a new causal discovery or estimation method to CDIE is modular and straightforward. Follow these steps:
+
+### 1. Implement the Algorithm Wrapper
+Create a new file in `cdie/pipeline/` (e.g., `fci_discovery.py` or `dml_estimation.py`).
+Encapsulate your logic in a function that accepts a Pandas DataFrame and optional prior knowledge, returning a structured output.
+For a discovery method, return a list of directed edges:
+```python
+import pandas as pd
+
+def run_custom_discovery(df: pd.DataFrame, prior_knowledge=None) -> list[tuple[str, str]]:
+    # 1. Initialize your algorithm
+    # 2. Apply background knowledge
+    # 3. Execute causal discovery
+    # 4. Return list of directed edges
+    return [('feature_A', 'feature_B'), ('feature_C', 'feature_D')]
+```
+
+### 2. Register in the Pipeline
+Open `cdie/pipeline/run_pipeline.py`. Import your new method and integrate it into the `run_full_pipeline()` execution flow. You can expose it as an alternative algorithm flag or as an automated fallback.
+
+### 3. Update the API Endpoints (If Applicable)
+If your method exposes new hyperparameters (like alpha or sparsity penalties) that users should tweak, update the `CausalRequest` Pydantic model in `cdie/api/main.py` and pass those parameters into the pipeline function call.
+
+### 4. Write a Refutation Test
+We enforce test-driven causal validation. Add a test in `tests/test_causal_methods.py` (or similar) to verify your method behaves correctly against a known Ground Truth (like SACHS or ALARM). Ensure you include a **DoWhy Refutation** (e.g., random common cause, placebo treatment) to validate the robustness of your estimates.
+
+---
+
 ## 🗺️ Roadmap: CDIE v5
 - **Federated Causal Learning**: Allowing multiple operators to share causal insights without moving raw data.
 - **Auto-Priors**: Using Large Language Models (LLMs) to automatically generate `DOMAIN_PRIORS` from telecom PDFs during discovery.

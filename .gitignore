@@ -68,3 +68,6 @@ test_out.txt
 to_do.md
 debug_lookup.py
 .agent
+
+# Secrets
+secrets/

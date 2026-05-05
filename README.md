@@ -61,7 +61,7 @@ Unlike correlation-based ML (XGBoost/SHAP) that identifies **what is associated*
 └──────────────────────────────────────┬──────────────────────────────┘
                                        │
 ┌──────────────────────────────────────▼──────────────────────────────┐
-│  CDIE v4 Engine                                                     │
+│  CDIE v5 Engine                                                     │
 │                                                                     │
 │  OFFLINE PIPELINE                    ONLINE API                     │
 │  ┌──────────────┐  ┌──────────┐    ┌──────────────────────────┐   │
@@ -75,7 +75,7 @@ Unlike correlation-based ML (XGBoost/SHAP) that identifies **what is associated*
 │  │ (EconML)     │  │ (CI)     │    │ Prescriptive Engine      │   │
 │  └──────────────┘  └──────────┘    │ + HITL Edge Rejection    │   │
 │                                     └──────────────────────────┘   │
-│  FRONTENDS:  Streamlit (Legacy) │ Next.js + React Flow (Production)│
+│  FRONTENDS:  Next.js 16 + React 19 (Modern Dashboard)              │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -112,7 +112,7 @@ chmod +x setup.sh && ./setup.sh
 setup.cmd
 ```
 
-This starts **7 containers**: TGI → OPEA TextGen → TEI Embedding → TEI Reranking → Offline Pipeline → FastAPI → Streamlit UI.
+This starts **7 containers**: TGI → OPEA TextGen → TEI Embedding → TEI Reranking → Offline Pipeline → FastAPI → Next.js UI.
 
 ### Manual Setup (without Docker)
 
@@ -131,8 +131,8 @@ python -m cdie.pipeline.run_pipeline
 # Start the API server
 python -m uvicorn cdie.api.main:app --host 0.0.0.0 --port 8000
 
-# Start the Next.js frontend (production)
-cd frontend && npm install && npm run dev
+# Start the Next.js frontend (production mode)
+cd frontend && npm install && npm run build && npm run start
 ```
 
 ### Runtime Storage Recommendation
@@ -192,7 +192,7 @@ This project bridges causal inference and generative AI, but several open proble
 
 1. **Synthetic Validation**: All empirical results rest on a **2,000-row, 14-variable** synthetic telecommunications DGP. GFCI precision (93.8%) and recall (88.2%) are measured against the known ground-truth DAG of this synthetic process. The system requires validation against raw, noisy operator datasets (e.g., GSMA CDR telemetry) — our benchmark numbers should not be interpreted as performance guaranteed on production data.
 2. **Memory & Scalability**: The offline GFCI discovery step (causal-learn) is memory-intensive, consuming **~57 GB peak RAM** on a 12-node graph with 2,000 rows. Scaling to 20+ variables or millions of rows may require subsampling, constraint-based discovery alternatives (PC/FCI), or distributed computing. The online Safety Map lookup layer is lightweight (~96 MB RSS) and scales independently.
-3. **Real-World HTE Calibration**: While v5 implements automated CATE discovery via `CausalForestDML` to segment treatment impact across `SubscriberTenureMonths` and `DeviceTier`, the heterogeneity relies on interactions synthetically injected into the Structural Equations. Scaling this to thousands of latent feature dimensions in real GSM datasets requires larger, stratified validation.
+3. **Real-World HTE Calibration**: While v5 implements automated CATE discovery via `CausalForestDML` segmentation showing per-subscriber sensitive clusters (e.g. DeviceTier), the heterogeneity relies on interactions synthetically injected into the Structural Equations. Scaling this to thousands of latent feature dimensions in real GSM datasets requires larger, stratified validation.
 4. **Static DAG & Identifiability**: We assume the causal graph is fully identifiable from observational data. Unmeasured confounders violate this assumption, and the system currently lacks latent-variable identifiability guarantees built into the GFCI algorithm.
 5. **Online Updating**: Fast <1 ms queries rely on a pre-computed Safety Map (SQLite). The static causal graph cannot dynamically re-calculate causal mechanisms online without queuing a full offline pipeline run — a known limitation for real-time feedback loops.
 6. **Intel AMX throughput claim**: Our README previously mentioned a ~18× throughput improvement based on OPEA reference benchmarks for TGI and TEI services. On our local development hardware (Intel Alder Lake), this specific ISA optimization was not actively benchmarked; our observed lookup latency remains under 2ms even without AMX acceleration. Theoretical peaks of 18× are reserved for Sapphire Rapids (or newer) using BF16 matrix multiply units.
@@ -217,7 +217,7 @@ environment:
   - DNNL_MAX_CPU_ISA=AVX512_CORE_AMX
   - KMP_AFFINITY=granularity=fine,compact,1,0
   - KMP_BLOCKTIME=1
-  - OMP_NUM_THREADS=4
+  - OMP_NUM_THREADS=12
 ```
 
 Run the Intel benchmark:

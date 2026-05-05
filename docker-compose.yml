@@ -13,9 +13,11 @@ services:
     container_name: rename-tgi
     ports:
       - "8008:80"
+    secrets:
+      - hf_token
     environment:
-      - HF_TOKEN=${HF_TOKEN}
-      - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN}
+      - HF_TOKEN_FILE=/run/secrets/hf_token
+      - HUGGING_FACE_HUB_TOKEN_FILE=/run/secrets/hf_token
       # Intel AMX/AVX-512 Hardware Optimization
       - DNNL_MAX_CPU_ISA=AVX512_CORE_AMX
       - KMP_AFFINITY=granularity=fine,compact,1,0
@@ -49,11 +51,13 @@ services:
     container_name: rename-opea-textgen
     ports:
       - "8888:9000"  # host:container — internal port is 9000
+    secrets:
+      - hf_token
     environment:
       - LLM_ENDPOINT=http://tgi-service:80
       - LLM_MODEL_ID=Intel/neural-chat-7b-v3-3
       - LLM_COMPONENT_NAME=OpeaTextGenService
-      - HF_TOKEN=${HF_TOKEN}
+      - HF_TOKEN_FILE=/run/secrets/hf_token
       # Intel AMX/AVX-512 Hardware Optimization
       - DNNL_MAX_CPU_ISA=AVX512_CORE_AMX
       - KMP_AFFINITY=granularity=fine,compact,1,0
@@ -84,8 +88,10 @@ services:
     container_name: rename-tei-embedding
     ports:
       - "6006:80"
+    secrets:
+      - hf_token
     environment:
-      - HF_TOKEN=${HF_TOKEN}
+      - HF_TOKEN_FILE=/run/secrets/hf_token
       # Intel AMX/AVX-512 Hardware Optimization
       - DNNL_MAX_CPU_ISA=AVX512_CORE_AMX
       - KMP_AFFINITY=granularity=fine,compact,1,0
@@ -113,8 +119,10 @@ services:
     container_name: rename-tei-reranking
     ports:
       - "8808:80"
+    secrets:
+      - hf_token
     environment:
-      - HF_TOKEN=${HF_TOKEN}
+      - HF_TOKEN_FILE=/run/secrets/hf_token
       # Intel AMX/AVX-512 Hardware Optimization
       - DNNL_MAX_CPU_ISA=AVX512_CORE_AMX
       - KMP_AFFINITY=granularity=fine,compact,1,0
@@ -284,3 +292,7 @@ volumes:
 networks:
   cdie-network:
     driver: bridge
+
+secrets:
+  hf_token:
+    file: ./secrets/hf_token.txt

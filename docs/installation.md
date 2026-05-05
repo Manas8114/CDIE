@@ -25,13 +25,19 @@ git clone https://github.com/Manas8114/CDIE-v4.git
 cd CDIE-v4
 ```
 
-### Environment Variables:
-Copy the example environment file and add your Hugging Face token:
+### Environment Variables & Secrets:
+For production-like deployments, we use **Docker Secrets** to securely handle tokens instead of relying on plain-text `.env` files.
 
-```bash
-cp .env.example .env
-# Edit .env and set HF_TOKEN=your_token_here
-```
+1. Copy the example environment file:
+   ```bash
+   cp .env.example .env
+   ```
+2. Place your Hugging Face token securely in a text file:
+   ```bash
+   mkdir -p secrets
+   echo "your_hf_token_here" > secrets/hf_token.txt
+   ```
+*(Note: The `secrets/` directory is ignored by Git to prevent accidental commits.)*
 
 ---
 
